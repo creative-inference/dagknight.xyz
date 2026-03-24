@@ -1,0 +1,26 @@
+title: "DAGKnight"
+description: "Where ancient chivalry meets the futuristic magic of BlockDAG consensus"
+url: "https://dagknight.xyz"
+baseurl: ""
+
+markdown: kramdown
+kramdown:
+  input: GFM
+
+permalink: pretty
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "default"
+
+collections:
+  gallery:
+    output: false
+
+# Build
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock

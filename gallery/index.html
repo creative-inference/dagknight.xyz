@@ -1,0 +1,41 @@
+---
+layout: default
+title: "The Gallery — Visions of the Realm"
+description: "Images conjured from the chronicles of DAGKnight — tweet art and generated visions"
+---
+
+<div class="page-content">
+  <h1>The Gallery</h1>
+  <p style="color: var(--text-dim); margin-bottom: 3rem;">
+    Visions conjured by the order's scribes — artwork from the DAGKnight chronicles,
+    generated imagery, and dispatches shared across the realm.
+  </p>
+</div>
+
+<section class="section" style="padding-top: 0;">
+  <div class="gallery-grid">
+    {% for image in site.gallery %}
+    <div class="gallery-item">
+      <img src="{{ image.image | relative_url }}" alt="{{ image.title }}" loading="lazy">
+      <div class="gallery-caption">
+        {{ image.title }}
+        {% if image.source %}<br><a href="{{ image.source }}" target="_blank" style="font-size:0.8rem;">View original</a>{% endif %}
+        <span class="date">{{ image.date | date: "%B %d, %Y" }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if site.gallery.size == 0 %}
+  <div style="text-align:center; padding: 4rem 2rem;">
+    <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.3;">&#x1F5BC;</div>
+    <p style="color: var(--text-dim); font-style: italic; font-size: 1.1rem;">
+      The scribes are gathering visions from across the realm...<br>
+      Gallery images coming soon.
+    </p>
+    <p style="color: var(--text-dim); margin-top: 1.5rem; font-size: 0.9rem;">
+      To add images, place them in <code>assets/img/gallery/</code> and create entries in <code>_gallery/</code>
+    </p>
+  </div>
+  {% endif %}
+</section>

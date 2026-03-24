@@ -1,0 +1,14 @@
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="{{ '/' | relative_url }}" class="nav-brand">DAG<span>Knight</span></a>
+    <button class="nav-toggle" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links">
+      <li><a href="{{ '/' | relative_url }}" {% if page.url == '/' %}class="active"{% endif %}>Realm</a></li>
+      <li><a href="{{ '/lore/' | relative_url }}" {% if page.url contains '/lore' %}class="active"{% endif %}>Lore</a></li>
+      <li><a href="{{ '/gallery/' | relative_url }}" {% if page.url contains '/gallery' %}class="active"{% endif %}>Gallery</a></li>
+      <li><a href="{{ '/codex/' | relative_url }}" {% if page.url contains '/codex' %}class="active"{% endif %}>Codex</a></li>
+    </ul>
+  </div>
+</nav>

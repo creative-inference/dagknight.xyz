@@ -1,1 +1,93 @@
-Dag Knight
+---
+layout: default
+title: "DAGKnight — Where Chivalry Meets BlockDAG"
+description: "A fantasy realm where ancient knights wield the futuristic magic of BlockDAG consensus"
+---
+
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-emblem glow-pulse">&#9876;</div>
+    <h1>The Order of <span class="highlight">DAGKnight</span></h1>
+    <p class="subtitle">&#x2726; Consensus Through Honor &#x2726;</p>
+    <p class="tagline">
+      In a realm where parallel chains of destiny weave through time itself,
+      the Knights of the Directed Acyclic Graph stand vigilant &mdash;
+      guardians of truth in a world of concurrent realities.
+    </p>
+    <div class="hero-cta">
+      <a href="{{ '/lore/' | relative_url }}" class="btn btn-primary">Enter the Lore</a>
+      <a href="{{ '/gallery/' | relative_url }}" class="btn btn-outline">View the Gallery</a>
+    </div>
+  </div>
+</section>
+
+<div class="rune-divider">&#x16A0; &#x16B1; &#x16A2; &#x16B7; &#x16A6;</div>
+
+<section class="section">
+  <h2 class="section-title">The <span class="gold">Three Pillars</span> of the <span class="teal">Realm</span></h2>
+  <p class="section-subtitle">
+    Every DAGKnight draws power from the ancient trinity of BlockDAG consensus
+  </p>
+  <div class="lore-grid">
+    <div class="lore-card">
+      <div class="lore-icon">&#x2694;</div>
+      <h3>The Parallel Blades</h3>
+      <p>
+        Unlike the single-chain warriors of old, DAGKnights wield parallel blades &mdash;
+        multiple blocks forged simultaneously, each valid, each true. The DAG structure
+        allows knights to act concurrently without conflict, achieving throughput
+        no sequential order could match.
+      </p>
+    </div>
+    <div class="lore-card">
+      <div class="lore-icon">&#x1F6E1;</div>
+      <h3>The Consensus Shield</h3>
+      <p>
+        The PHANTOM protocol forms an impenetrable shield, identifying honest knights
+        from shadow agents through the topology of the DAG itself. No central authority
+        decrees truth &mdash; the structure of connections reveals it, achieving ordering
+        with mathematical certainty.
+      </p>
+    </div>
+    <div class="lore-card">
+      <div class="lore-icon">&#x2728;</div>
+      <h3>The Confirmation Spell</h3>
+      <p>
+        Through the DAGKnight protocol's adaptive magic, confirmation times bend
+        to the will of network conditions. Whether the realm is calm or under siege,
+        the spell adjusts &mdash; delivering finality in seconds rather than the
+        eons demanded by lesser chains.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="rune-divider">&#x16A0; &#x16B1; &#x16A2; &#x16B7; &#x16A6;</div>
+
+<section class="section">
+  <h2 class="section-title">Dispatches from the <span class="gold">Realm</span></h2>
+  <p class="section-subtitle">
+    Visions conjured by the order's scribes, chronicling the DAGKnight saga
+  </p>
+  <div class="gallery-grid">
+    {% for image in site.gallery limit:6 %}
+    <div class="gallery-item">
+      <img src="{{ image.image | relative_url }}" alt="{{ image.title }}" loading="lazy">
+      <div class="gallery-caption">
+        {{ image.title }}
+        <span class="date">{{ image.date | date: "%B %Y" }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% if site.gallery.size > 6 %}
+    <div style="grid-column: 1 / -1; text-align: center; padding: 2rem;">
+      <a href="{{ '/gallery/' | relative_url }}" class="btn btn-outline">View Full Gallery</a>
+    </div>
+    {% endif %}
+  </div>
+  {% if site.gallery.size == 0 %}
+  <p style="text-align:center; color: var(--text-dim); font-style: italic;">
+    The scribes are gathering visions... Gallery images coming soon.
+  </p>
+  {% endif %}
+</section>
