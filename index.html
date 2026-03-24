@@ -69,25 +69,32 @@ description: "A fantasy realm where ancient knights wield the futuristic magic o
   <p class="section-subtitle">
     Visions conjured by the order's scribes, chronicling the DAGKnight saga
   </p>
-  <div class="gallery-grid">
-    {% for item in site.data.gallery limit:6 %}
-    <div class="gallery-item">
-      <img src="{{ item.image | relative_url }}" alt="{{ item.title }}" loading="lazy">
-      <div class="gallery-caption">
-        {{ item.title }}
-        <span class="date">{{ item.date }}</span>
+  <div class="tweet-feed">
+    {% for item in site.data.gallery limit:3 %}
+    <article class="tweet-card">
+      <div class="tweet-image">
+        <img src="{{ item.image | relative_url }}" alt="Tweet image" loading="lazy">
       </div>
-    </div>
+      <div class="tweet-body">
+        <p class="tweet-text">{{ item.text | newline_to_br }}</p>
+        <div class="tweet-meta">
+          <span class="tweet-date">{{ item.date }}</span>
+          {% if item.tweet_url %}
+          <a href="{{ item.tweet_url }}" target="_blank" rel="noopener" class="tweet-link">View on X &rarr;</a>
+          {% endif %}
+        </div>
+      </div>
+    </article>
     {% endfor %}
-    {% if site.data.gallery.size > 6 %}
-    <div style="grid-column: 1 / -1; text-align: center; padding: 2rem;">
-      <a href="{{ '/gallery/' | relative_url }}" class="btn btn-outline">View Full Gallery</a>
+    {% if site.data.gallery.size > 3 %}
+    <div style="text-align: center; padding: 2rem;">
+      <a href="{{ '/gallery/' | relative_url }}" class="btn btn-outline">View All Dispatches</a>
     </div>
     {% endif %}
   </div>
   {% if site.data.gallery.size == 0 %}
   <p style="text-align:center; color: var(--text-dim); font-style: italic;">
-    The scribes are gathering visions... Gallery images coming soon.
+    The scribes are gathering visions... Dispatches coming soon.
   </p>
   {% endif %}
 </section>

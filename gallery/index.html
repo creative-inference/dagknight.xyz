@@ -1,40 +1,40 @@
 ---
 layout: default
-title: "The Gallery — Visions of the Realm"
-description: "Images conjured from the chronicles of DAGKnight — tweet art and generated visions"
+title: "The Gallery — Dispatches from the Realm"
+description: "Published tweets from the DAGKnight chronicles"
 ---
 
 <div class="page-content">
-  <h1>The Gallery</h1>
+  <h1>Dispatches from the Realm</h1>
   <p style="color: var(--text-dim); margin-bottom: 3rem;">
-    Visions conjured by the order's scribes — artwork from the DAGKnight chronicles,
-    generated imagery, and dispatches shared across the realm.
+    Published chronicles from across the BlockDAG kingdom.
   </p>
 </div>
 
 <section class="section" style="padding-top: 0;">
-  <div class="gallery-grid">
+  <div class="tweet-feed">
     {% for item in site.data.gallery %}
-    <div class="gallery-item">
-      <img src="{{ item.image | relative_url }}" alt="{{ item.title }}" loading="lazy">
-      <div class="gallery-caption">
-        {{ item.title }}
-        {% if item.source %}<br><a href="{{ item.source }}" target="_blank" style="font-size:0.8rem;">View original</a>{% endif %}
-        <span class="date">{{ item.date }}</span>
+    <article class="tweet-card">
+      <div class="tweet-image">
+        <img src="{{ item.image | relative_url }}" alt="Tweet image" loading="lazy">
       </div>
-    </div>
+      <div class="tweet-body">
+        <p class="tweet-text">{{ item.text | newline_to_br }}</p>
+        <div class="tweet-meta">
+          <span class="tweet-date">{{ item.date }}</span>
+          {% if item.tweet_url %}
+          <a href="{{ item.tweet_url }}" target="_blank" rel="noopener" class="tweet-link">View on X &rarr;</a>
+          {% endif %}
+        </div>
+      </div>
+    </article>
     {% endfor %}
   </div>
 
   {% if site.data.gallery.size == 0 %}
   <div style="text-align:center; padding: 4rem 2rem;">
-    <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.3;">&#x1F5BC;</div>
     <p style="color: var(--text-dim); font-style: italic; font-size: 1.1rem;">
-      The scribes are gathering visions from across the realm...<br>
-      Gallery images coming soon.
-    </p>
-    <p style="color: var(--text-dim); margin-top: 1.5rem; font-size: 0.9rem;">
-      To add images, place them in <code>assets/img/gallery/</code> and create entries in <code>_gallery/</code>
+      No dispatches yet...
     </p>
   </div>
   {% endif %}
