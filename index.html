@@ -70,22 +70,22 @@ description: "A fantasy realm where ancient knights wield the futuristic magic o
     Visions conjured by the order's scribes, chronicling the DAGKnight saga
   </p>
   <div class="gallery-grid">
-    {% for image in site.gallery limit:6 %}
+    {% for item in site.data.gallery limit:6 %}
     <div class="gallery-item">
-      <img src="{{ image.image | relative_url }}" alt="{{ image.title }}" loading="lazy">
+      <img src="{{ item.image | relative_url }}" alt="{{ item.title }}" loading="lazy">
       <div class="gallery-caption">
-        {{ image.title }}
-        <span class="date">{{ image.date | date: "%B %Y" }}</span>
+        {{ item.title }}
+        <span class="date">{{ item.date }}</span>
       </div>
     </div>
     {% endfor %}
-    {% if site.gallery.size > 6 %}
+    {% if site.data.gallery.size > 6 %}
     <div style="grid-column: 1 / -1; text-align: center; padding: 2rem;">
       <a href="{{ '/gallery/' | relative_url }}" class="btn btn-outline">View Full Gallery</a>
     </div>
     {% endif %}
   </div>
-  {% if site.gallery.size == 0 %}
+  {% if site.data.gallery.size == 0 %}
   <p style="text-align:center; color: var(--text-dim); font-style: italic;">
     The scribes are gathering visions... Gallery images coming soon.
   </p>

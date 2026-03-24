@@ -14,19 +14,19 @@ description: "Images conjured from the chronicles of DAGKnight — tweet art and
 
 <section class="section" style="padding-top: 0;">
   <div class="gallery-grid">
-    {% for image in site.gallery %}
+    {% for item in site.data.gallery %}
     <div class="gallery-item">
-      <img src="{{ image.image | relative_url }}" alt="{{ image.title }}" loading="lazy">
+      <img src="{{ item.image | relative_url }}" alt="{{ item.title }}" loading="lazy">
       <div class="gallery-caption">
-        {{ image.title }}
-        {% if image.source %}<br><a href="{{ image.source }}" target="_blank" style="font-size:0.8rem;">View original</a>{% endif %}
-        <span class="date">{{ image.date | date: "%B %d, %Y" }}</span>
+        {{ item.title }}
+        {% if item.source %}<br><a href="{{ item.source }}" target="_blank" style="font-size:0.8rem;">View original</a>{% endif %}
+        <span class="date">{{ item.date }}</span>
       </div>
     </div>
     {% endfor %}
   </div>
 
-  {% if site.gallery.size == 0 %}
+  {% if site.data.gallery.size == 0 %}
   <div style="text-align:center; padding: 4rem 2rem;">
     <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.3;">&#x1F5BC;</div>
     <p style="color: var(--text-dim); font-style: italic; font-size: 1.1rem;">

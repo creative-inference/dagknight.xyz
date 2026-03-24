@@ -1,0 +1,99 @@
+- title: "Smart contract development is now out of the dark ages. With full Debug..."
+  image: /assets/img/gallery/871ee4e670834563a256bc6839cad9da.png
+  date: 2026-03-20
+- title: "vProgs scalability depends on the L1's raw speed. The new Perigee P2P..."
+  image: /assets/img/gallery/ef28a8b1be6347e0a9eba35b09a5c1a0.png
+  date: 2026-03-20
+- title: "Sequential execution is the L1 bottleneck. vProgs on Kaspa's BlockDAG enables..."
+  image: /assets/img/gallery/21a74e1dea7543439dc534398693b01a.png
+  date: 2026-03-20
+- title: "vProgs are built on a PoW foundation. This isn't a legacy choice; it's a..."
+  image: /assets/img/gallery/ae33a2873626494cbcd4934c69201800.png
+  date: 2026-03-20
+- title: "KIP 21 proposes an 'Efficient Sequencing Commitment' for vProgs. This is the..."
+  image: /assets/img/gallery/f9e91e03722647369fea87f98fae508c.png
+  date: 2026-03-21
+- title: "The next evolution of Kaspa's consensus is taking shape. The `devnet` branch..."
+  image: /assets/img/gallery/008f8586abd54a99ba1928dbfcc9a934.png
+  date: 2026-03-22
+- title: "The doors to DeFi on Kaspa are wide open. A new stablecoin bridge, built using..."
+  image: /assets/img/gallery/783fdbfee14e472caca0ed7dbf5ab8f5.png
+  date: 2026-03-23
+- title: "We just crossed a monumental milestone: 1 BILLION transactions processed on..."
+  image: /assets/img/gallery/5147758d4d634ab6b57bab82d0e4123d.png
+  date: 2026-03-23
+- title: ""
+  image: /assets/img/gallery/1c50c5a5c9134b4499b4fb9626cf5c25.png
+  date: 2026-03-23
+- title: "How do vProgs scale without L1 bloat? Through a decentralized prover market...."
+  image: /assets/img/gallery/7cde02ea24cb48f0bc1d240ef0d00ec9.png
+  date: 2026-03-22
+- title: "Rollups create fragmented liquidity and bridge risk. vProgs enable Synchronous..."
+  image: /assets/img/gallery/067aa97903a943acb3c249aafecb675b.png
+  date: 2026-03-22
+- title: "vProgs handle complex shared state. For local-state logic, Silverscript offers..."
+  image: /assets/img/gallery/0fbd90a79313454882007f0794d8c4da.png
+  date: 2026-03-23
+- title: "How do vProgs scale without sharding? Through KIP-21's partitioned sequencing..."
+  image: /assets/img/gallery/6839720ffcde459ab4166504407a048f.png
+  date: 2026-03-24
+- title: "The next evolution of Kaspa's consensus is taking shape. The official `devnet`..."
+  image: /assets/img/gallery/92c50a550c254a59b57535ff32b31fa4.png
+  date: 2026-03-24
+- title: "An incredible turnout for the Kaspathon hackathon: 296 developers shipped 49..."
+  image: /assets/img/gallery/ec2280b335c4430ab023008bd8ab49ac.png
+  date: 2026-03-24
+- title: ""
+  image: /assets/img/gallery/d19dcdc34c3d4281b7df1d7ec7b1b1bd.png
+  date: 2026-03-24
+- title: "The recent ZK-Rollup PoC is enabled by a core vProgs primitive: on-chain proof..."
+  image: /assets/img/gallery/a99ee73df929495eb6b87d805dd0799c.png
+  date: 2026-03-20
+- title: "The core vProgs ZK question: dedicated verifiers (Groth16/UltraHonk) for..."
+  image: /assets/img/gallery/297afe13e14f45d7818cf58690236427.png
+  date: 2026-03-20
+- title: "The core ZK question for vProgs: low-level elliptic curve opcodes for maximum..."
+  image: /assets/img/gallery/45c89877366f40ab90628a1df554ec2b.png
+  date: 2026-03-20
+- title: "KIP-0017 proposes L1 covenants for Kaspa. This primitive is essential,..."
+  image: /assets/img/gallery/fe793a9618684ed0abc230b21320e106.png
+  date: 2026-03-20
+- title: "L1-verified ZK-Rollups on Kaspa are now a reality. Our PoC demonstrates a full..."
+  image: /assets/img/gallery/4e9e34b168e049f1bc560d8cff00c654.png
+  date: 2026-03-20
+- title: "On-chain STARK verification requires block space. The proposed TN12 plan..."
+  image: /assets/img/gallery/47ef6449027443f982f330d9fcf807a2.png
+  date: 2026-03-20
+- title: "vProgs has achieved a major milestone: a working ZK-rollup covenant example...."
+  image: /assets/img/gallery/c73023aff0c84749b53ce2b4c734732c.png
+  date: 2026-03-20
+- title: "vProgs will bridge assets from the Kaspa BlockDAG through a canonical bridge...."
+  image: /assets/img/gallery/d66b67a362054f3bb57eb94f02e69927.png
+  date: 2026-03-20
+- title: "The latest progress on Rusty Kaspa (PR #773) provides the core functionality..."
+  image: /assets/img/gallery/dba19ce5ea954c8bac8ff68573a02b6a.png
+  date: 2026-03-20
+- title: "The next Kaspa testnet is targeted to include the first on-chain stress test..."
+  image: /assets/img/gallery/487895ef6dd1435f9330becc443a3292.png
+  date: 2026-03-20
+- title: "The Covenants++ hardfork proposal outlines a path to foundational..."
+  image: /assets/img/gallery/8334a83643c3423cbf55dc18f3330592.png
+  date: 2026-03-20
+- title: "That recent community stress test was something else. 179 MILLION transactions..."
+  image: /assets/img/gallery/8a5a8a50fba649f4b0ed29c1219ce254.png
+  date: 2026-03-21
+- title: "From L2 launchpad to CEX listing! $SOMPI, a token from the Kasplex L2, is now..."
+  image: /assets/img/gallery/c0fdabd84800411e824602e17f7e5f12.png
+  date: 2026-03-22
+- title: "Kaspa confirms in under a second. Not because of a trick — because the DAG..."
+  image: /assets/img/gallery/45c89877366f40ab90628a1df554ec2b.png
+  date: 2026-03-22
+- title: "The Kasplex L2 is seeing a surge of real-world activity, processing nearly..."
+  image: /assets/img/gallery/e73a028ef2f44b09a782acf99668c060.png
+  date: 2026-03-22
+- title: "The gates are open for DeFi. A new stablecoin bridge is now live on the..."
+  image: /assets/img/gallery/7bf0c7646288420ab6d250b2ba6623d4.png
+  date: 2026-03-22
+- title: "Security is paramount. Stoked to see hardware wallet support expand, with..."
+  image: /assets/img/gallery/9743c55cd4534f9292a2daf3f0f80ced.png
+  date: 2026-03-22

@@ -15,10 +15,6 @@ defaults:
     values:
       layout: "default"
 
-collections:
-  gallery:
-    output: false
-
 # Build
 exclude:
   - README.md
