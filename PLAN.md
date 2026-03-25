@@ -53,15 +53,27 @@ Replace the simulated chain log with real BlockDAG data.
 
 Game state moves from localStorage to covenant UTXOs. Browser builds and submits real transactions.
 
-### 2.1 Browser Transaction Construction
-- **kaspa-wasm** (Rust→WASM) loaded in browser for tx building + signing
-- Generate keypair in browser, store in localStorage
-- Fund via faucet or CPU mining
-- Build covenant spend txs with proper inputs/outputs/scripts
-- Submit via wRPC `SubmitTransaction`
-- Read game state from UTXOs via `GetUtxosByAddresses`
+### 2.1 Browser Transaction Construction — PROVEN (2026-03-25)
 
-**Open question:** Does kaspa-wasm support covenant script construction yet? Need to investigate or ask @michaelsuttonil / @IzioDev.
+**All components work in the browser:**
+- `@kasdk/web` (v0.15.2) — browser-compatible WASM build of the Kaspa SDK
+- `PrivateKey` — generate random keypair, derive TN12 address
+- `ScriptBuilder` — construct custom scripts with arbitrary opcodes
+- `ScriptPublicKey` — wrap scripts into transaction outputs
+- `Transaction` — assemble complete transactions with custom script outputs
+- `POST https://api-tn12.kaspa.org/transactions` — submit to TN12 (REST API)
+- `GET https://api-tn12.kaspa.org/addresses/{addr}/utxos` — read UTXOs
+
+**Architecture confirmed:**
+```
+SilverScript compiler → script hex → ScriptBuilder.fromScript() → Transaction → POST to TN12 REST API
+```
+
+**Key findings:**
+- TN12 is NOT in the public wRPC Resolver — use REST API at `api-tn12.kaspa.org` instead
+- No wRPC WebSocket needed for Phase 2 — REST API has full tx submission
+- Keypair generated in browser, stored in localStorage
+- Fund via faucet (when available) or CPU mining
 
 ### 2.2 SilverScript Covenants
 
@@ -145,9 +157,10 @@ proofs/                   — RISC Zero guest programs (Phase 2)
 ```
 
 ## Open Questions
-- [ ] Does kaspa-wasm support covenant script construction in browser?
-- [ ] TN12 node hosting — run our own or community endpoint?
+- [x] ~~Does kaspa-wasm support covenant script construction in browser?~~ YES — `@kasdk/web` v0.15.2, `ScriptBuilder` + `Transaction` confirmed working (2026-03-25)
+- [x] ~~TN12 node hosting~~ — REST API at `api-tn12.kaspa.org` is public, includes tx submission
 - [ ] Faucet — need test KAS for Phase 2 (CPU mine or request from team?)
 - [ ] SilverScript stability — compiler API may change before mainnet (May 5, 2026)
 - [ ] Verifiable randomness — block hash as monster seed fair enough for demo?
 - [ ] Browser wallet extensions — will KasWare add covenant tx support?
+- [ ] SilverScript → script hex — can we compile in browser (WASM compiler) or pre-compile and embed?
