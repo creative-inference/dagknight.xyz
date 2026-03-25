@@ -312,9 +312,24 @@
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
+.chain-dot-live {
+  background: #33ff33;
+  animation: pulse-dot-live 1s ease-in-out infinite;
+}
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; box-shadow: 0 0 6px #d4a847; }
+}
+
+@keyframes pulse-dot-live {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; box-shadow: 0 0 8px #33ff33; }
+}
+
+.ce-info {
+  color: #338888;
+  font-style: italic;
 }
 
 #chain-feed {

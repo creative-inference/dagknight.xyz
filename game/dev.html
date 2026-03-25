@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DAG Gate — Local Dev</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Space+Grotesk:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="../assets/css/styles.css">
+  <link rel="stylesheet" href="../assets/css/game.css">
+  <style>
+    /* Minimal nav/footer stand-ins for local dev */
+    .dev-banner {
+      background: #d4a847;
+      color: #000;
+      text-align: center;
+      padding: 0.3rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="dev-banner">LOCAL DEV — game/dev.html — no Jekyll required</div>
+
+  <div id="terminal">
+    <div id="terminal-output"></div>
+    <div id="terminal-input" class="hidden">
+      <span class="prompt-char">&gt;</span>
+      <input type="text" id="input-field" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+
+  <div id="chain-log">
+    <div class="chain-header">
+      <span class="chain-title">BlockDAG Activity Log</span>
+      <span class="chain-status"><span class="chain-dot"></span> SIMULATED</span>
+    </div>
+    <div id="chain-feed"></div>
+  </div>
+
+  <script src="../assets/js/game/data.js"></script>
+  <script src="../assets/js/game/state.js"></script>
+  <script src="../assets/js/game/combat.js"></script>
+  <script src="../assets/js/game/screens.js"></script>
+  <script src="../assets/js/game/engine.js"></script>
+  <script src="../assets/js/game/chain.js"></script>
+</body>
+</html>
