@@ -6,6 +6,104 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
 
 <link rel="stylesheet" href="{{ '/assets/css/game.css' | relative_url }}">
 
+<div class="hero" style="padding: 5rem 2rem 3rem;">
+  <div class="hero-content">
+    <div class="hero-emblem">&#x2694;</div>
+    <h1>The <span class="highlight">DAG Gate</span></h1>
+    <p class="subtitle">A BlockDAG Door Game</p>
+    <p class="tagline">In the tradition of Legend of the Red Dragon (1992)</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="game-intro">
+    <h2 class="section-title">What <span class="gold">Sorcery</span> Is This?</h2>
+    <p class="section-subtitle" style="max-width: 700px; margin: 0 auto 2rem;">
+      In 1991, Seth Able created <em>Legend of the Red Dragon</em> &mdash; a text-based RPG
+      that ran on BBS servers, where knights fought monsters, traded at shops, and battled
+      each other through a 2400-baud modem. The game needed a <strong>trusted host</strong>:
+      a sysop running the server, managing the database, enforcing the rules.
+    </p>
+
+    <div class="pillars">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x26D3;</div>
+        <h3>The Old Way</h3>
+        <p>
+          BBS door games required a central server. The sysop <em>was</em> the consensus layer.
+          They stored your character, validated your moves, and could wipe the database on a whim.
+          Trust was social. Cheating was a whisper away.
+        </p>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x25C8;</div>
+        <h3>The BlockDAG Way</h3>
+        <p>
+          Every character sheet is a <strong>covenant-enforced UTXO</strong>. Every sword swing
+          is a <strong>state transition</strong> validated by ZK proof. Every trade is an
+          <strong>atomic ICC transaction</strong> between Player and Shop covenants.
+          No server. No sysop. No trust required.
+        </p>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x2726;</div>
+        <h3>Why It Matters</h3>
+        <p>
+          This isn't nostalgia &mdash; it's a proof of concept. If Kaspa's covenant stack
+          can run a multiplayer RPG with persistent state, daily resets, PvP combat, and an
+          economy &mdash; it can run <em>anything</em>. DeFi, DAOs, games, and applications
+          we haven't imagined yet.
+        </p>
+      </div>
+    </div>
+
+    <div class="game-tech-note">
+      <h3>How The Covenants Map</h3>
+      <div class="tech-grid">
+        <div class="tech-row">
+          <span class="tech-game">Character Sheet</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Self-preserving UTXO with <code>validateOutputState()</code></span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Forest Combat</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Episodic Game covenant + RISC Zero proof of valid moves</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Shop Purchase</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">ICC atomic tx: Player covenant + Shop covenant co-validate</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">PvP Arena</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Two Player covenants + Arena covenant, timeout via <code>this.age</code></span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Daily Fight Limit</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">UTXO age introspection: <code>this.age &gt; 86400</code> resets counter</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Gold &amp; Stakes</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Native KAS locked in covenant, enforced via KIP-10 introspection</span>
+        </div>
+      </div>
+    </div>
+
+    <p style="text-align: center; color: var(--text-dim); margin-top: 2.5rem; font-style: italic;">
+      Phase 1 below runs client-side as a playable demo.<br>
+      Phase 2 will put every state transition on Kaspa's BlockDAG.
+    </p>
+  </div>
+</section>
+
+<section class="section" style="padding-top: 1rem;">
+  <h2 class="section-title" style="margin-bottom: 1.5rem;">Enter the <span class="teal">Terminal</span></h2>
+</section>
+
 <div id="terminal">
   <div id="terminal-output"></div>
   <div id="terminal-input" class="hidden">

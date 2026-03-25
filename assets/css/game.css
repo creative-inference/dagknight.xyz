@@ -1,7 +1,82 @@
 /* ============================================================
    DAGKnight BBS Terminal — game.css
-   Scoped entirely under #terminal to isolate from site theme
    ============================================================ */
+
+/* ---------- Game intro section ---------- */
+
+.game-intro {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.game-tech-note {
+  margin-top: 2.5rem;
+  padding: 2rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-gold);
+  border-radius: 8px;
+}
+
+.game-tech-note h3 {
+  font-family: var(--font-display);
+  color: var(--accent-gold);
+  text-align: center;
+  margin-bottom: 1.5rem;
+  font-size: 1.2rem;
+}
+
+.tech-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tech-row {
+  display: grid;
+  grid-template-columns: 160px 30px 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.tech-game {
+  font-family: var(--font-mono);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.tech-arrow {
+  color: var(--accent-gold);
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.tech-chain {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.tech-chain code {
+  color: var(--primary);
+  background: rgba(112, 199, 186, 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 768px) {
+  .tech-row {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+  .tech-arrow { display: none; }
+  .tech-game { margin-top: 0.5rem; }
+}
+
+/* ---------- Terminal ---------- */
 
 #terminal {
   position: relative;
