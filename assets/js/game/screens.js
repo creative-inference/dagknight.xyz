@@ -486,16 +486,34 @@ async function screenPvP() {
   E.dim(`  HP: ${opp.maxHp}  ATK: ${opp.attack}+${opp.weapon.bonus}  DEF: ${opp.defense}+${opp.armor.bonus}`);
   E.blank();
 
-  // Simple combat loop (like forest but vs NPC)
+  // PvP combat loop — redraws each round like forest combat
+  let pvpLog = [];
+
   while (s.hp > 0 && opp.hp > 0) {
-    E.line(`  ─── HP: ${s.hp}/${s.maxHp}  vs  ${opp.name}: ${opp.hp}/${opp.maxHp} ───`);
+    E.clear();
+    E.gold('  === THE BYZANTINE COLOSSEUM ===');
+    E.blank();
+    E.line(`  ${s.name.padEnd(20)}  ${opp.name}`);
+    E.line(`  HP: ${s.hp}/${s.maxHp}${' '.repeat(14 - String(s.hp).length - String(s.maxHp).length)}HP: ${opp.hp}/${opp.maxHp}`);
+    E.line(`  ATK: ${s.attack}+${s.weapon.bonus}${' '.repeat(15 - String(s.attack).length - String(s.weapon.bonus).length)}ATK: ${opp.attack}+${opp.weapon.bonus}`);
+    E.line(`  DEF: ${s.defense}+${s.armor.bonus}${' '.repeat(15 - String(s.defense).length - String(s.armor.bonus).length)}DEF: ${opp.defense}+${opp.armor.bonus}`);
+    E.blank();
+
+    if (pvpLog.length > 0) {
+      E.dim('  --- Last Round ---');
+      pvpLog.forEach(l => l.fn(l.text));
+      E.blank();
+    }
+
     const cOpts = [{ key: 'A', label: 'Attack' }];
     if (s.potions > 0) cOpts.push({ key: 'H', label: `Heal Potion (${s.potions})` });
     cOpts.push({ key: 'R', label: 'Forfeit' });
 
     const ch = await E.menu(cOpts);
+    pvpLog = [];
 
     if (ch === 'R') {
+      E.clear();
       E.dim('  You forfeit the match.');
       await E.pause();
       await screenTown();
@@ -506,7 +524,7 @@ async function screenPvP() {
       const heal = Math.floor(s.maxHp * 0.4);
       s.hp = Math.min(s.maxHp, s.hp + heal);
       s.potions--;
-      E.cyan(`  Healed ${heal} HP.`);
+      pvpLog.push({ fn: E.cyan.bind(E), text: `  Healed ${heal} HP.` });
     }
 
     if (ch === 'A') {
@@ -515,7 +533,8 @@ async function screenPvP() {
         { name: opp.name, attack: opp.attack, weapon: opp.weapon, defense: opp.defense, armor: opp.armor, hp: opp.hp }
       );
       opp.hp = r1.defenderHp;
-      E.gold(`  You strike ${opp.name} for ${r1.damage}!`);
+      pvpLog.push({ fn: E.gold.bind(E), text: `  You strike ${opp.name} for ${r1.damage}!` });
+      Chain.emitCovenantTx('Arena::combat', `Player → ${opp.name} | -${r1.damage} HP`);
     }
 
     if (opp.hp > 0) {
@@ -524,9 +543,8 @@ async function screenPvP() {
         { name: s.name, attack: s.attack, weapon: s.weapon, defense: s.defense, armor: s.armor, hp: s.hp }
       );
       s.hp = r2.defenderHp;
-      E.red(`  ${opp.name} hits you for ${r2.damage}!`);
+      pvpLog.push({ fn: E.red.bind(E), text: `  ${opp.name} hits you for ${r2.damage}!` });
     }
-    E.blank();
   }
 
   if (s.hp <= 0) {
