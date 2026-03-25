@@ -156,9 +156,27 @@ async function screenForest() {
 // ----- Combat -----
 async function screenCombat(monster) {
   const s = window._state;
+  const monsterMax = monster.hp;
+  let log = []; // last round's action log
 
   while (s.hp > 0 && monster.hp > 0) {
-    E.line(`  ─── HP: ${s.hp}/${s.maxHp}  vs  ${monster.name}: ${monster.hp} HP ───`);
+    // Redraw entire combat screen each round
+    E.clear();
+    E.gold(`  ═══ COMBAT: ${s.name} vs ${monster.name} ═══`);
+    E.blank();
+    E.line(`  ${s.name.padEnd(20)}  ${monster.name}`);
+    E.line(`  HP: ${s.hp}/${s.maxHp}${' '.repeat(14 - String(s.hp).length - String(s.maxHp).length)}HP: ${monster.hp}/${monsterMax}`);
+    E.line(`  ATK: ${s.attack}+${s.weapon.bonus}${' '.repeat(15 - String(s.attack).length - String(s.weapon.bonus).length)}ATK: ${monster.attack}`);
+    E.line(`  DEF: ${s.defense}+${s.armor.bonus}${' '.repeat(15 - String(s.defense).length - String(s.armor.bonus).length)}DEF: ${monster.defense}`);
+    E.blank();
+
+    // Show last round's log
+    if (log.length > 0) {
+      E.dim('  --- Last Round ---');
+      log.forEach(l => l.fn(l.text));
+      E.blank();
+    }
+
     const opts = [
       { key: 'A', label: 'Attack' },
       { key: 'D', label: 'Defend (half damage taken)' },
@@ -167,15 +185,17 @@ async function screenCombat(monster) {
     opts.push({ key: 'R', label: 'Run away' });
 
     const choice = await E.menu(opts);
+    log = [];
 
     if (choice === 'R') {
       if (Math.random() < 0.5) {
+        E.clear();
         E.dim('  You flee from battle!');
         await E.pause();
         await screenTown();
         return;
       } else {
-        E.red('  You failed to escape!');
+        log.push({ fn: E.red.bind(E), text: '  You failed to escape!' });
       }
     }
 
@@ -183,7 +203,7 @@ async function screenCombat(monster) {
       const heal = Math.floor(s.maxHp * 0.4);
       s.hp = Math.min(s.maxHp, s.hp + heal);
       s.potions--;
-      E.cyan(`  You drink a potion and restore ${heal} HP.`);
+      log.push({ fn: E.cyan.bind(E), text: `  You drink a potion and restore ${heal} HP.` });
     }
 
     if (choice === 'A') {
@@ -192,10 +212,7 @@ async function screenCombat(monster) {
         { name: monster.name, attack: monster.attack, weapon: { bonus: 0 }, defense: monster.defense, armor: { bonus: 0 }, hp: monster.hp }
       );
       monster.hp = result.defenderHp;
-      E.gold(`  You strike the ${monster.name} for ${result.damage} damage!`);
-      if (monster.hp > 0) {
-        E.dim(`  ${monster.name} has ${monster.hp} HP remaining.`);
-      }
+      log.push({ fn: E.gold.bind(E), text: `  You strike the ${monster.name} for ${result.damage} damage!` });
     }
 
     // Monster attacks back if alive
@@ -203,11 +220,8 @@ async function screenCombat(monster) {
       let defMult = choice === 'D' ? 0.5 : 1;
       const mDmg = Math.max(1, Math.floor(rollDamage(monster.attack, 0, s.defense, s.armor.bonus) * defMult));
       s.hp = Math.max(0, s.hp - mDmg);
-      E.red(`  ${monster.name} hits you for ${mDmg} damage!`);
-      if (s.hp > 0) E.dim(`  Your HP: ${s.hp}/${s.maxHp}`);
+      log.push({ fn: E.red.bind(E), text: `  ${monster.name} hits you for ${mDmg} damage!` });
     }
-
-    E.blank();
   }
 
   if (s.hp <= 0) {
