@@ -2,7 +2,7 @@ title: "DAGKnight"
 description: "Where ancient chivalry meets the futuristic magic of BlockDAG consensus"
 url: "https://dagknight.xyz"
 baseurl: ""
-version: "1.5"
+version: "1.6"
 
 markdown: kramdown
 kramdown:

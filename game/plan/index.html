@@ -1,0 +1,224 @@
+---
+layout: default
+title: "The DAG Gate — Integration Plan"
+description: "How we'll connect a BBS door game to Kaspa's BlockDAG with no backend server"
+---
+
+<div class="hero" style="padding: 5rem 2rem 3rem;">
+  <div class="hero-content">
+    <div class="hero-emblem">&#x1F5FA;</div>
+    <h1>The <span class="highlight">Plan</span></h1>
+    <p class="subtitle">Static Frontend + TN12 Node. No Backend.</p>
+    <p class="tagline">The BlockDAG is the server.</p>
+  </div>
+</div>
+
+<section class="section">
+  <div style="max-width: 800px; margin: 0 auto; padding: 0 1rem;">
+
+    <h2 class="section-title">The <span class="gold">Goal</span></h2>
+    <p style="color: var(--text); margin-bottom: 2rem;">
+      Run The DAG Gate as a <strong>static frontend</strong> that connects directly to a
+      Kaspa TN12 node via wRPC WebSocket. Game state lives on-chain as covenant-enforced UTXOs.
+      No backend server. No database. No middleware. The browser talks to the BlockDAG.
+    </p>
+
+    <div class="game-tech-note" style="margin-bottom: 3rem;">
+      <h3>Architecture</h3>
+      <pre style="color: var(--primary); font-size: 0.8rem; line-height: 1.4; overflow-x: auto;">
+GitHub Pages (static)          TN12 Node
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;         &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474;  HTML/CSS/JS &#9474;         &#9474;  wRPC JSON :18310 &#9474;
+&#9474;  kaspa-wasm  &#9474;&#9668;&#9472;&#9472;WSS&#9472;&#9472;&#9658;&#9474;  Covenant engine  &#9474;
+&#9474;  (tx build)  &#9474;         &#9474;  ZK verification  &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;         &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</pre>
+      <p style="text-align: center; color: var(--text-dim); font-size: 0.85rem; margin-top: 0.5rem;">
+        Browser reads UTXOs, builds covenant txs via kaspa-wasm, signs locally, submits via wRPC.
+      </p>
+    </div>
+
+    <!-- Phase 0 -->
+    <h2 class="section-title">Phase 0 <span class="teal">(Done)</span></h2>
+    <div class="pillars" style="margin-bottom: 2.5rem;">
+      <div class="pillar-card" style="flex: 1;">
+        <div class="pillar-icon">&#x2705;</div>
+        <h3>Playable Demo</h3>
+        <ul style="color: var(--text-dim); font-size: 0.9rem; list-style: none; padding: 0; line-height: 2;">
+          <li>&#x2713; BBS terminal aesthetic with CRT scanlines</li>
+          <li>&#x2713; Full game loop: create character, forest combat, shop, inn, PvP</li>
+          <li>&#x2713; Simulated chain activity log with covenant tx equivalents</li>
+          <li>&#x2713; Architecture explainer mapping game mechanics to covenants</li>
+          <li>&#x2713; localStorage persistence</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Phase 1 -->
+    <h2 class="section-title">Phase 1: <span class="gold">Live TN12 Connection</span></h2>
+    <p style="color: var(--text); margin-bottom: 1.5rem;">
+      Replace the simulated chain log with real BlockDAG data. Read-only &mdash; no game transactions yet.
+    </p>
+
+    <div class="pillars" style="margin-bottom: 1rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x26A1;</div>
+        <h3>wRPC WebSocket</h3>
+        <p>
+          Connect to TN12 node's wRPC JSON endpoint via WebSocket.
+          Subscribe to real block notifications at 10 BPS.
+          Display block hashes, DAA scores, tx counts, parent counts.
+          Reconnect with backoff. Falls back to simulated if no node configured.
+        </p>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x1F50D;</div>
+        <h3>Read Chain State</h3>
+        <p>
+          Query <code>GetBlockDagInfo</code> for live network stats.
+          Query <code>GetUtxosByAddresses</code> to show real UTXO data.
+          Display DAA score, tip count, and difficulty in chain panel header.
+        </p>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x2699;</div>
+        <h3>Prerequisites</h3>
+        <p>
+          TN12 node with wRPC JSON enabled (port 18310).
+          Reverse proxy with TLS for <code>wss://</code> browser security.
+          Decision: run our own node or use a community endpoint.
+        </p>
+      </div>
+    </div>
+
+    <!-- Phase 2 -->
+    <h2 class="section-title" style="margin-top: 2.5rem;">Phase 2: <span class="gold">On-Chain Game State</span></h2>
+    <p style="color: var(--text); margin-bottom: 1.5rem;">
+      Game state moves from localStorage to covenant UTXOs. The browser builds and submits real transactions.
+    </p>
+
+    <div class="game-tech-note" style="margin-bottom: 2rem;">
+      <h3>Browser Transaction Flow</h3>
+      <div class="tech-grid">
+        <div class="tech-row">
+          <span class="tech-game">kaspa-wasm</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Rust&rarr;WASM SDK loaded in browser for tx building + signing</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Keypair</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Generated in browser, stored in localStorage, funded via faucet</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Build Tx</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Construct covenant spend with proper inputs/outputs/scripts</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Submit</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain"><code>SubmitTransaction</code> via same wRPC WebSocket</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Read State</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain"><code>GetUtxosByAddresses</code> to decode Player covenant UTXO</span>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-family: var(--font-display); color: var(--accent-gold); margin-bottom: 1rem;">SilverScript Covenants</h3>
+
+    <div class="pillars" style="margin-bottom: 1rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x1F6E1;</div>
+        <h3>player.ss</h3>
+        <p>
+          <strong>Self-preserving UTXO.</strong> Holds character state: name, class, level, XP, HP,
+          stats, gold, equipment. Every spend recreates the UTXO with updated state.
+          Auth-bound to player's pubkey.
+        </p>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x2694;</div>
+        <h3>game.ss</h3>
+        <p>
+          <strong>Episodic covenant.</strong> Created when entering the forest, consumed when combat
+          resolves. ICC with Player covenant in a single atomic transaction.
+          Monster selection deterministic from block hash.
+        </p>
+      </div>
+    </div>
+    <div class="pillars" style="margin-bottom: 2rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x1F3EA;</div>
+        <h3>shop.ss</h3>
+        <p>
+          <strong>Persistent shared state.</strong> Holds inventory and prices.
+          ICC with Player covenant: atomic tx validates gold transfer + item grant.
+          No trusted shopkeeper.
+        </p>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x1F3DF;</div>
+        <h3>arena.ss</h3>
+        <p>
+          <strong>PvP with staked KAS.</strong> Two Player covenant inputs + Arena covenant.
+          Timeout via <code>this.age &gt; 300</code> (5 min per turn).
+          Winner gets the pot.
+        </p>
+      </div>
+    </div>
+
+    <h3 style="font-family: var(--font-display); color: var(--accent-gold); margin-bottom: 1rem;">ZK Proof Generation</h3>
+    <p style="color: var(--text-dim); margin-bottom: 2.5rem;">
+      Complex combat math runs off-chain in a <strong>RISC Zero guest program</strong>.
+      Input: player stats, monster stats, random seed from block hash.
+      Output: valid state transition (new HP, XP, gold).
+      The proof is submitted alongside the covenant spend &mdash; the L1 verifies without re-executing.
+      For simpler math, inline SilverScript validation avoids proof overhead entirely.
+    </p>
+
+    <!-- Phase 3 -->
+    <h2 class="section-title">Phase 3: <span class="gold">Multiplayer</span></h2>
+
+    <div class="pillars" style="margin-bottom: 2rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x1F30D;</div>
+        <h3>Shared World</h3>
+        <p>
+          Player UTXOs visible to all &mdash; leaderboard by scanning covenant UTXOs.
+          PvP challenges reference opponent's Player UTXO directly.
+          Opponent notified via UTXO subscription.
+        </p>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x23F0;</div>
+        <h3>Protocol-Native Mechanics</h3>
+        <p>
+          Daily fight reset: <code>require(this.age &gt; 86400)</code> on Player UTXO &mdash;
+          no server clock needed. Gold = locked test KAS (sompi).
+          PvP stakes: both players lock KAS, winner takes pot.
+        </p>
+      </div>
+    </div>
+
+    <!-- Open Questions -->
+    <h2 class="section-title">Open <span class="teal">Questions</span></h2>
+    <ul style="color: var(--text-dim); font-size: 0.9rem; list-style: none; padding: 0; line-height: 2.2; margin-bottom: 2rem;">
+      <li>&#x2753; Does kaspa-wasm support covenant script construction in browser?</li>
+      <li>&#x2753; TN12 node hosting &mdash; run our own or community endpoint?</li>
+      <li>&#x2753; Faucet &mdash; need test KAS for Phase 2 (CPU mine or request from team?)</li>
+      <li>&#x2753; SilverScript stability &mdash; compiler API may change before mainnet (May 5, 2026)</li>
+      <li>&#x2753; Verifiable randomness &mdash; block hash as monster seed fair enough?</li>
+      <li>&#x2753; Browser wallet extensions &mdash; will KasWare add covenant tx support?</li>
+    </ul>
+
+    <p style="text-align: center; margin-top: 2rem; margin-bottom: 1rem;">
+      <a href="{{ '/game/' | relative_url }}" style="color: var(--accent-gold); text-decoration: none; font-family: var(--font-mono); font-size: 0.9rem;">
+        &larr; Back to The DAG Gate
+      </a>
+    </p>
+
+  </div>
+</section>
