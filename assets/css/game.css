@@ -240,6 +240,139 @@
   50% { opacity: 0; }
 }
 
+/* ---------- Disclaimer ---------- */
+
+.chain-disclaimer {
+  max-width: 800px;
+  margin: 1.5rem auto;
+  padding: 1rem 1.5rem;
+  background: rgba(212, 168, 71, 0.08);
+  border: 1px solid rgba(212, 168, 71, 0.25);
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.chain-disclaimer strong {
+  color: var(--accent-gold);
+}
+
+.chain-disclaimer a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+/* ---------- Chain activity log ---------- */
+
+#chain-log {
+  max-width: 800px;
+  margin: 0 auto 3rem;
+  background: #050510;
+  border: 1px solid #1a3a5c;
+  box-shadow: 0 0 15px rgba(68, 255, 255, 0.08);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #44ffff;
+}
+
+.chain-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #1a3a5c;
+  background: rgba(68, 255, 255, 0.04);
+}
+
+.chain-title {
+  color: #44ffff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+.chain-status {
+  color: #d4a847;
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.chain-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #d4a847;
+  border-radius: 50%;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; box-shadow: 0 0 6px #d4a847; }
+}
+
+#chain-feed {
+  height: 180px;
+  overflow-y: auto;
+  padding: 0.5rem 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: #1a3a5c #050510;
+}
+
+#chain-feed::-webkit-scrollbar { width: 3px; }
+#chain-feed::-webkit-scrollbar-track { background: #050510; }
+#chain-feed::-webkit-scrollbar-thumb { background: #1a3a5c; }
+
+.chain-entry {
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(26, 58, 92, 0.3);
+  opacity: 0;
+  animation: chain-fade-in 0.3s forwards;
+}
+
+@keyframes chain-fade-in {
+  to { opacity: 1; }
+}
+
+.chain-entry .ce-time {
+  color: #336688;
+}
+
+.chain-entry .ce-hash {
+  color: #44ffff;
+}
+
+.chain-entry .ce-txs {
+  color: #338888;
+}
+
+.chain-entry .ce-parents {
+  color: #336688;
+}
+
+/* Covenant tx highlight */
+.chain-entry.covenant-tx {
+  background: rgba(212, 168, 71, 0.06);
+  border-left: 2px solid #d4a847;
+  padding-left: 0.5rem;
+}
+
+.chain-entry.covenant-tx .ce-label {
+  color: #d4a847;
+  font-weight: 700;
+}
+
+.chain-entry.covenant-tx .ce-detail {
+  color: #887744;
+  font-size: 0.7rem;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 768px) {
@@ -248,5 +381,16 @@
     margin: 1rem;
     padding: 1rem;
     font-size: 0.75rem;
+  }
+
+  #chain-log {
+    margin: 0 1rem 2rem;
+    font-size: 0.65rem;
+  }
+
+  #chain-feed { height: 140px; }
+
+  .chain-disclaimer {
+    margin: 1rem;
   }
 }

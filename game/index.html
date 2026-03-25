@@ -112,8 +112,24 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
   </div>
 </div>
 
+<div class="chain-disclaimer">
+  <strong>Note:</strong> This game is not yet integrated with Kaspa TN12.
+  The chain activity log below is <strong>simulated</strong> to demonstrate what
+  on-chain gameplay will look like when covenant transactions are live.
+  <a href="#chain-log">Phase 2</a> will connect to real BlockDAG state.
+</div>
+
+<div id="chain-log">
+  <div class="chain-header">
+    <span class="chain-title">BlockDAG Activity Log</span>
+    <span class="chain-status"><span class="chain-dot"></span> SIMULATED</span>
+  </div>
+  <div id="chain-feed"></div>
+</div>
+
 <script src="{{ '/assets/js/game/data.js' | relative_url }}?v={{ site.version }}"></script>
 <script src="{{ '/assets/js/game/state.js' | relative_url }}?v={{ site.version }}"></script>
 <script src="{{ '/assets/js/game/combat.js' | relative_url }}?v={{ site.version }}"></script>
 <script src="{{ '/assets/js/game/screens.js' | relative_url }}?v={{ site.version }}"></script>
 <script src="{{ '/assets/js/game/engine.js' | relative_url }}?v={{ site.version }}"></script>
+<script src="{{ '/assets/js/game/chain.js' | relative_url }}?v={{ site.version }}"></script>
