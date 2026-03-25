@@ -1,0 +1,21 @@
+---
+layout: default
+title: "The DAG Gate"
+description: "A BBS door game forged in the fires of BlockDAG consensus"
+---
+
+<link rel="stylesheet" href="{{ '/assets/css/game.css' | relative_url }}">
+
+<div id="terminal">
+  <div id="terminal-output"></div>
+  <div id="terminal-input" class="hidden">
+    <span class="prompt-char">&gt;</span>
+    <input type="text" id="input-field" autocomplete="off" spellcheck="false">
+  </div>
+</div>
+
+<script src="{{ '/assets/js/game/data.js' | relative_url }}"></script>
+<script src="{{ '/assets/js/game/state.js' | relative_url }}"></script>
+<script src="{{ '/assets/js/game/combat.js' | relative_url }}"></script>
+<script src="{{ '/assets/js/game/screens.js' | relative_url }}"></script>
+<script src="{{ '/assets/js/game/engine.js' | relative_url }}"></script>

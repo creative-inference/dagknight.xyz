@@ -1,0 +1,180 @@
+/* ============================================================
+   DAGKnight BBS Terminal — game.css
+   Scoped entirely under #terminal to isolate from site theme
+   ============================================================ */
+
+#terminal {
+  position: relative;
+  min-height: 70vh;
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background: #000;
+  border: 1px solid #33ff33;
+  box-shadow: 0 0 20px rgba(51, 255, 51, 0.15), inset 0 0 60px rgba(0, 0, 0, 0.8);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #33ff33;
+  overflow: hidden;
+}
+
+/* CRT scanline overlay */
+#terminal::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+#terminal-output {
+  position: relative;
+  z-index: 1;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 65vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #33ff33 #000;
+}
+
+#terminal-output::-webkit-scrollbar { width: 4px; }
+#terminal-output::-webkit-scrollbar-track { background: #000; }
+#terminal-output::-webkit-scrollbar-thumb { background: #33ff33; }
+
+/* ---------- Text classes ---------- */
+
+.t-green { color: #33ff33; }
+.t-gold { color: #d4a847; }
+.t-red { color: #ff4444; }
+.t-cyan { color: #44ffff; }
+.t-dim { color: #338833; }
+.t-white { color: #cccccc; }
+.t-magenta { color: #ff44ff; }
+.t-bold { font-weight: 700; }
+
+.line {
+  display: block;
+  min-height: 1.6em;
+}
+
+.line-ascii {
+  color: #d4a847;
+  line-height: 1.15;
+}
+
+/* ---------- Menu options ---------- */
+
+.menu-option {
+  display: block;
+  cursor: pointer;
+  padding: 2px 0;
+  transition: color 0.15s;
+}
+
+.menu-option:hover {
+  color: #d4a847;
+  text-shadow: 0 0 6px rgba(212, 168, 71, 0.5);
+}
+
+.menu-key {
+  color: #d4a847;
+  font-weight: 700;
+}
+
+/* ---------- Input area ---------- */
+
+#terminal-input {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  margin-top: 0.5rem;
+  border-top: 1px solid #1a661a;
+  padding-top: 0.5rem;
+}
+
+#terminal-input.hidden { display: none; }
+
+.prompt-char {
+  color: #d4a847;
+  font-weight: 700;
+  margin-right: 0.5rem;
+  font-size: 1rem;
+}
+
+#input-field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #33ff33;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  caret-color: #33ff33;
+}
+
+/* ---------- HP/XP bars ---------- */
+
+.bar-track {
+  display: inline-block;
+  width: 20ch;
+  background: #1a1a1a;
+  border: 1px solid #338833;
+  height: 1em;
+  vertical-align: middle;
+  position: relative;
+  overflow: hidden;
+}
+
+.bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: width 0.3s;
+}
+
+.bar-hp { background: #33ff33; }
+.bar-xp { background: #d4a847; }
+
+/* ---------- Typewriter cursor ---------- */
+
+.cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  background: #33ff33;
+  animation: blink 0.8s step-end infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 768px) {
+  #terminal {
+    margin: 1rem;
+    padding: 1rem;
+    font-size: 0.75rem;
+    min-height: 60vh;
+  }
+
+  #terminal-output {
+    max-height: 55vh;
+  }
+}
