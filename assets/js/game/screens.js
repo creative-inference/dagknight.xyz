@@ -147,9 +147,23 @@ async function screenForest() {
   E.blank();
 
   const monster = randomMonster(s.level);
-  E.red(`  A ${monster.name} appears!`);
-  E.dim(`  HP: ${monster.hp}  ATK: ${monster.attack}  DEF: ${monster.defense}`);
+  E.red(`  ★ A ${monster.name} emerges from the shadows!`);
   E.blank();
+  E.line(`  HP: ${monster.hp}  ATK: ${monster.attack}  DEF: ${monster.defense}`);
+  E.blank();
+  E.dim(`  Fights remaining today: ${s.forestFightsMax - s.forestFightsToday}`);
+
+  Chain.emitCovenantTx('Game::encounter', `Episodic Game UTXO created — ${monster.name} spawned`);
+
+  const choice = await E.menu([
+    { key: 'F', label: 'Fight!' },
+    { key: 'R', label: 'Run back to town' },
+  ]);
+
+  if (choice === 'R') {
+    await screenTown();
+    return;
+  }
 
   await screenCombat(monster);
 }
@@ -160,10 +174,20 @@ async function screenCombat(monster) {
   const monsterMax = monster.hp;
   let log = []; // last round's action log
 
+  let round = 0;
+
   while (s.hp > 0 && monster.hp > 0) {
+    round++;
     // Redraw entire combat screen each round
     E.clear();
-    E.gold(`  ═══ COMBAT: ${s.name} vs ${monster.name} ═══`);
+    E.ascii(FOREST_ART);
+    if (round === 1) {
+      E.red(`  ★ A ${monster.name} emerges from the shadows!`);
+    } else {
+      E.dim(`  Round ${round} in the Merkle Forest`);
+    }
+    E.blank();
+    E.gold(`  ═══ COMBAT ═══`);
     E.blank();
     E.line(`  ${s.name.padEnd(20)}  ${monster.name}`);
     E.line(`  HP: ${s.hp}/${s.maxHp}${' '.repeat(14 - String(s.hp).length - String(s.maxHp).length)}HP: ${monster.hp}/${monsterMax}`);
