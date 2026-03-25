@@ -46,7 +46,6 @@ GitHub Pages (static)          TN12 Node
         <ul style="color: var(--text-dim); font-size: 0.9rem; list-style: none; padding: 0; line-height: 2;">
           <li>&#x2713; BBS terminal aesthetic with CRT scanlines</li>
           <li>&#x2713; Full game loop: create character, forest combat, shop, inn, PvP</li>
-          <li>&#x2713; Simulated chain activity log with covenant tx equivalents</li>
           <li>&#x2713; Architecture explainer mapping game mechanics to covenants</li>
           <li>&#x2713; localStorage persistence</li>
         </ul>
@@ -54,39 +53,73 @@ GitHub Pages (static)          TN12 Node
     </div>
 
     <!-- Phase 1 -->
-    <h2 class="section-title">Phase 1: <span class="gold">Live TN12 Connection</span></h2>
+    <h2 class="section-title">Phase 1: <span class="teal">Live TN12 Connection (Done)</span></h2>
     <p style="color: var(--text); margin-bottom: 1.5rem;">
-      Replace the simulated chain log with real BlockDAG data. Read-only &mdash; no game transactions yet.
+      The chain activity log now shows real blocks from Kaspa Testnet-12 via the public REST API.
     </p>
 
     <div class="pillars" style="margin-bottom: 1rem;">
       <div class="pillar-card">
-        <div class="pillar-icon">&#x26A1;</div>
-        <h3>wRPC WebSocket</h3>
+        <div class="pillar-icon">&#x2705;</div>
+        <h3>Live Block Feed</h3>
         <p>
-          Connect to TN12 node's wRPC JSON endpoint via WebSocket.
-          Subscribe to real block notifications at 10 BPS.
-          Display block hashes, DAA scores, tx counts, parent counts.
-          Reconnect with backoff. Falls back to simulated if no node configured.
+          Connected to <code>api-tn12.kaspa.org</code> REST API.
+          Polls <code>/info/blockdag</code> for real DAA scores, tip hashes, and block deltas
+          from <strong>kaspa-testnet-12</strong>. Green pulsing indicator shows live status.
+          Falls back to simulated data if API is unreachable.
         </p>
       </div>
       <div class="pillar-card">
-        <div class="pillar-icon">&#x1F50D;</div>
-        <h3>Read Chain State</h3>
+        <div class="pillar-icon">&#x2705;</div>
+        <h3>Browser Tx Construction</h3>
         <p>
-          Query <code>GetBlockDagInfo</code> for live network stats.
-          Query <code>GetUtxosByAddresses</code> to show real UTXO data.
-          Display DAA score, tip count, and difficulty in chain panel header.
+          Proven working with <code>@kasdk/web</code> (v0.15.2).
+          <code>PrivateKey</code>, <code>ScriptBuilder</code>, <code>Transaction</code>,
+          and <code>TransactionOutput</code> all work in browser.
+          Custom scripts can be built and submitted via
+          <code>POST /transactions</code> to the TN12 REST API.
         </p>
       </div>
       <div class="pillar-card">
-        <div class="pillar-icon">&#x2699;</div>
-        <h3>Prerequisites</h3>
+        <div class="pillar-icon">&#x2705;</div>
+        <h3>No Backend Needed</h3>
         <p>
-          TN12 node with wRPC JSON enabled (port 18310).
-          Reverse proxy with TLS for <code>wss://</code> browser security.
-          Decision: run our own node or use a community endpoint.
+          TN12 is not in the public wRPC Resolver, but the REST API at
+          <code>api-tn12.kaspa.org</code> provides full access: block info,
+          UTXO queries, balance checks, and transaction submission.
+          Static site + REST API = complete stack.
         </p>
+      </div>
+    </div>
+
+    <div class="game-tech-note" style="margin-bottom: 2rem;">
+      <h3>Confirmed Pipeline</h3>
+      <div class="tech-grid">
+        <div class="tech-row">
+          <span class="tech-game">SilverScript</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Compile to script hex (compiler needed)</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">ScriptBuilder</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain"><code>ScriptBuilder.fromScript(hex)</code> in browser &mdash; PROVEN</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Transaction</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Assemble with custom script outputs &mdash; PROVEN</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Submit</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain"><code>POST api-tn12.kaspa.org/transactions</code> &mdash; PROVEN</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game">Read State</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain"><code>GET /addresses/{addr}/utxos</code> to decode covenant UTXO &mdash; PROVEN</span>
+        </div>
       </div>
     </div>
 
@@ -97,32 +130,27 @@ GitHub Pages (static)          TN12 Node
     </p>
 
     <div class="game-tech-note" style="margin-bottom: 2rem;">
-      <h3>Browser Transaction Flow</h3>
+      <h3>What Remains for Phase 2</h3>
       <div class="tech-grid">
         <div class="tech-row">
-          <span class="tech-game">kaspa-wasm</span>
+          <span class="tech-game">Compiler</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Rust&rarr;WASM SDK loaded in browser for tx building + signing</span>
+          <span class="tech-chain">Compile <code>player.ss</code> to script hex with SilverScript compiler</span>
         </div>
         <div class="tech-row">
-          <span class="tech-game">Keypair</span>
+          <span class="tech-game">Fund Players</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Generated in browser, stored in localStorage, funded via faucet</span>
+          <span class="tech-chain">Send 1 test KAS from faucet wallet to new players on character creation</span>
         </div>
         <div class="tech-row">
-          <span class="tech-game">Build Tx</span>
+          <span class="tech-game">State Read</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Construct covenant spend with proper inputs/outputs/scripts</span>
+          <span class="tech-chain">Wire <code>state.js</code> to decode Player UTXO instead of localStorage</span>
         </div>
         <div class="tech-row">
-          <span class="tech-game">Submit</span>
+          <span class="tech-game">State Write</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain"><code>SubmitTransaction</code> via same wRPC WebSocket</span>
-        </div>
-        <div class="tech-row">
-          <span class="tech-game">Read State</span>
-          <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain"><code>GetUtxosByAddresses</code> to decode Player covenant UTXO</span>
+          <span class="tech-chain">Each game action builds + submits a covenant spend tx</span>
         </div>
       </div>
     </div>
@@ -203,14 +231,21 @@ GitHub Pages (static)          TN12 Node
       </div>
     </div>
 
-    <!-- Open Questions -->
-    <h2 class="section-title">Open <span class="teal">Questions</span></h2>
+    <!-- Resolved + Open Questions -->
+    <h2 class="section-title">Resolved <span class="teal">Questions</span></h2>
     <ul style="color: var(--text-dim); font-size: 0.9rem; list-style: none; padding: 0; line-height: 2.2; margin-bottom: 2rem;">
-      <li>&#x2753; Does kaspa-wasm support covenant script construction in browser?</li>
-      <li>&#x2753; TN12 node hosting &mdash; run our own or community endpoint?</li>
-      <li>&#x2753; Faucet &mdash; need test KAS for Phase 2 (CPU mine or request from team?)</li>
+      <li style="color: var(--primary);">&#x2705; Browser tx construction &mdash; <code>@kasdk/web</code> v0.15.2, ScriptBuilder + Transaction confirmed working</li>
+      <li style="color: var(--primary);">&#x2705; TN12 connectivity &mdash; REST API at <code>api-tn12.kaspa.org</code> is public, includes tx submission</li>
+      <li style="color: var(--primary);">&#x2705; Test KAS &mdash; 10,000 KAS obtained from TN12 faucet</li>
+      <li style="color: var(--primary);">&#x2705; No backend needed &mdash; static frontend + REST API is the complete stack</li>
+    </ul>
+
+    <h2 class="section-title">Open <span class="gold">Questions</span></h2>
+    <ul style="color: var(--text-dim); font-size: 0.9rem; list-style: none; padding: 0; line-height: 2.2; margin-bottom: 2rem;">
+      <li>&#x2753; SilverScript compiler &mdash; can we compile in browser (WASM) or pre-compile and embed the script hex?</li>
       <li>&#x2753; SilverScript stability &mdash; compiler API may change before mainnet (May 5, 2026)</li>
-      <li>&#x2753; Verifiable randomness &mdash; block hash as monster seed fair enough?</li>
+      <li>&#x2753; Verifiable randomness &mdash; block hash as monster seed fair enough for demo?</li>
+      <li>&#x2753; Player onboarding &mdash; auto-send 1 test KAS to new players from faucet wallet?</li>
       <li>&#x2753; Browser wallet extensions &mdash; will KasWare add covenant tx support?</li>
     </ul>
 
