@@ -1,122 +1,128 @@
-# DAG Gate — TN12 Chain Integration Plan
+# DAG Gate — On-Chain BBS Game via TN12
 
 ## Goal
-Add a live TN12 chain activity panel alongside the game terminal, showing real BlockDAG activity at 10 BPS while the player plays. Game actions flash "simulated covenant tx" overlays to demonstrate what on-chain gameplay will look like.
+Run The DAG Gate as a **static frontend + TN12 node** with no backend server. The browser connects directly to a Kaspa TN12 node via wRPC WebSocket. Game state lives on-chain as covenant-enforced UTXOs. The BlockDAG is the server.
 
-## Prerequisites
-- [ ] TN12 node running with wRPC JSON enabled (port 18310)
-- [ ] Node publicly accessible (or tunneled) so browser WebSocket can connect
-- [ ] Test KAS in a wallet for future Phase 2 tx submission
+## Architecture
 
-## Phase 1: Live Chain Panel (read-only, no game txs)
+```
+GitHub Pages (static)          TN12 Node
+┌──────────────┐         ┌──────────────────┐
+│  HTML/CSS/JS │         │  wRPC JSON :18310 │
+│  kaspa-wasm  │◄──WSS──►│  Covenant engine  │
+│  (tx build)  │         │  ZK verification  │
+└──────────────┘         └──────────────────┘
+      │                         │
+      │   No backend server     │
+      │   No database           │
+      └─────────────────────────┘
+```
 
-### 1.1 Chain Activity WebSocket Client
-- New file: `assets/js/game/chain.js`
-- Connect to TN12 wRPC JSON endpoint via WebSocket (`wss://<node>:18310`)
-- Subscribe to new block notifications
-- Parse: block hash, DAA score, tx count, timestamp, number of parents (merge set)
-- Reconnect logic with backoff
-- Config: node URL stored in `_config.yml` as `tn12_wrpc_url` (empty = panel hidden)
+Browser reads UTXOs, builds covenant txs via kaspa-wasm, signs locally, submits via wRPC. That's the entire stack.
 
-### 1.2 Chain Panel UI
-- New sidebar or bottom strip alongside the terminal
-- Styled as a second "monitor" — different border color (cyan vs green)
-- Shows:
-  - **DAA Score** — ticking counter (like an odometer)
-  - **BPS** — calculated from recent blocks
-  - **Block Feed** — scrolling list of recent blocks (hash prefix, tx count, parents)
-  - **Network Stats** — total blocks, tips count, header count
-- Auto-scrolls, max ~20 visible blocks, old ones fade out
-- ASCII-styled to match BBS aesthetic
+## Current State (Phase 0 — Done)
+- [x] Playable client-side demo with BBS terminal aesthetic
+- [x] Full game loop: character creation, forest combat, shop, inn, PvP
+- [x] Simulated chain activity log showing covenant tx equivalents
+- [x] Game intro explaining covenant architecture mapping
+- [x] localStorage persistence
+- [x] Game nav link in site navigation
 
-### 1.3 Layout Changes
-- `game/index.html`: wrap terminal + chain panel in a flex container
-- Desktop: terminal (left, 60%) + chain panel (right, 40%)
-- Mobile: chain panel collapses to a thin ticker bar above terminal
-- `game.css`: new `.chain-panel` styles
+## Phase 1: Connect to Live TN12 (read-only)
 
-### 1.4 Game Action Flashes
-- When player performs an action (attack, buy, rest, PvP), emit an event
-- Chain panel shows a highlighted "simulated tx" entry:
-  ```
-  ► COVENANT TX (simulated)
-    Player::attack → Game::combat
-    State: HP 45→38, Gold +40
-  ```
-- Styled differently from real blocks (gold border, pulsing glow)
-- Maps each game action to its covenant equivalent:
-  - Attack → `Game covenant spend (episodic)`
-  - Buy item → `ICC: Player + Shop atomic tx`
-  - Rest at inn → `Player covenant 1:1 transition`
-  - PvP → `Player + Player + Arena atomic tx`
-  - Level up → `Player covenant state update`
+Replace the simulated chain log with real BlockDAG data.
 
-## Phase 2: On-Chain Game State (requires stable SilverScript)
+### 1.1 wRPC WebSocket Client
+- Update `chain.js` to connect to TN12 wRPC JSON endpoint (`wss://<node>:18310`)
+- Subscribe to new block notifications (real 10 BPS feed)
+- Display: block hash, DAA score, tx count, parent count
+- Reconnect with backoff; show connection status in chain panel
+- Node URL in `_config.yml` as `tn12_wrpc_url` (falls back to simulated if empty)
 
-### 2.1 Covenant Contracts
-- `contracts/player.ss` — Player state covenant (SilverScript)
-  - State: name, class, level, xp, hp, attack, defense, gold, weapon, armor
-  - Spends: combat_update, shop_purchase, inn_rest, pvp_result
-  - Self-preserving: output must carry same covenant with updated state
-  - Auth-bound to player pubkey
+### 1.2 Read Chain State
+- Query `GetBlockDagInfo` for network stats (DAA score, tip count, difficulty)
+- Query `GetUtxosByAddresses` to show real UTXO data
+- Display live network stats in chain panel header
 
-- `contracts/game.ss` — Episodic combat covenant
-  - Created on forest entry, consumed on combat resolution
-  - ICC with Player covenant: atomic tx validates combat math
-  - Monster selection deterministic from block hash (verifiable randomness)
+### 1.3 Prerequisites
+- [ ] TN12 node running with wRPC JSON enabled
+- [ ] Node accessible via `wss://` (reverse proxy with TLS for browser security)
+- [ ] Determine: run our own node or use community endpoint
 
-- `contracts/shop.ss` — Persistent shop covenant
-  - Holds inventory state
-  - ICC with Player: validates gold transfer + item grant
+## Phase 2: On-Chain Game State
 
-- `contracts/arena.ss` — PvP covenant
-  - Two player inputs + arena input
-  - Timeout via `this.age > 300` (5 min per turn)
-  - Winner gets staked KAS
+Game state moves from localStorage to covenant UTXOs. Browser builds and submits real transactions.
 
-### 2.2 Proof Generation
-- RISC Zero guest program for combat validation
-  - Input: player stats, monster stats, random seed (from block hash)
+### 2.1 Browser Transaction Construction
+- **kaspa-wasm** (Rust→WASM) loaded in browser for tx building + signing
+- Generate keypair in browser, store in localStorage
+- Fund via faucet or CPU mining
+- Build covenant spend txs with proper inputs/outputs/scripts
+- Submit via wRPC `SubmitTransaction`
+- Read game state from UTXOs via `GetUtxosByAddresses`
+
+**Open question:** Does kaspa-wasm support covenant script construction yet? Need to investigate or ask @michaelsuttonil / @IzioDev.
+
+### 2.2 SilverScript Covenants
+
+```
+contracts/
+  player.ss    — Character state (self-preserving UTXO)
+  game.ss      — Episodic combat (created on encounter, consumed on resolution)
+  shop.ss      — Persistent shop inventory
+  arena.ss     — PvP with staked KAS + timeout
+```
+
+**Player covenant** (`player.ss`)
+- State: name, class, level, xp, hp, attack, defense, gold, weapon, armor
+- Self-preserving: every spend must recreate the UTXO with updated state
+- Auth-bound to player's pubkey
+- Spends: `combat_update`, `shop_purchase`, `inn_rest`, `pvp_result`
+
+**Game covenant** (`game.ss`)
+- Episodic: created when entering forest, consumed when combat resolves
+- ICC with Player covenant in single atomic tx
+- Monster selection deterministic from block hash (verifiable randomness)
+
+**Shop covenant** (`shop.ss`)
+- Persistent shared state (inventory, prices)
+- ICC with Player: atomic tx validates gold transfer + item grant
+
+**Arena covenant** (`arena.ss`)
+- Two Player covenant inputs + Arena covenant input
+- Timeout via `this.age > 300` (5 min per turn)
+- Winner gets staked KAS
+
+### 2.3 ZK Proof Generation
+- RISC Zero guest program for combat math validation
+  - Input: player stats, monster stats, random seed (block hash)
   - Output: valid state transition (new HP, XP, gold)
   - Proof submitted alongside covenant spend
-- Alternatively: inline SilverScript validation for simpler combat math
+- Alternative: inline SilverScript for simpler combat math (avoid proof overhead)
 
-### 2.3 Transaction Construction (Browser)
-- Use `kaspa-wasm` SDK (Rust→WASM) for tx building in browser
-- Sign with browser-held keypair (or wallet extension when available)
-- Submit via wRPC `SubmitTransaction`
-- Game state read from UTXOs via `GetUtxosByAddresses`
-
-### 2.4 Hybrid State
-- On-chain: character state, gold balance, PvP stakes (real test KAS)
-- Client-side: UI state, animation, sound, text rendering
-- Fallback: if node disconnected, game continues client-side with localStorage
+### 2.4 Hybrid Fallback
+- If node disconnects, game continues client-side with localStorage
+- Reconnect syncs local state back to chain when possible
+- UI state (animations, text rendering) always client-side
 
 ## Phase 3: Multiplayer
 
 ### 3.1 Shared World
 - Player UTXOs visible to all — leaderboard by scanning covenant UTXOs
 - PvP challenges: construct Arena covenant tx referencing opponent's Player UTXO
-- Opponent sees pending tx via UTXO notification subscription
+- Opponent notified via UTXO subscription
 
-### 3.2 Daily Reset Mechanism
-- `this.age` introspection on Player UTXO
-- Forest fight counter resets when UTXO age > 86400 seconds
-- No server needed — time enforcement is protocol-native
-
-### 3.3 Economy
+### 3.2 Protocol-Native Mechanics
+- Daily fight reset: `require(this.age > 86400)` on Player UTXO — no server clock
 - Gold = locked test KAS (sompi) in Player covenant
-- Shop prices in real sompi
 - PvP stakes: both players lock KAS, winner takes pot
-- Inn cost burns KAS (sent to unspendable address or fee)
+- Inn cost: KAS fee for HP restore
 
-## File Structure (Final)
+## File Structure
 
 ```
 game/
   index.html              — game page with terminal + chain panel
-  architecture/
-    index.html            — detailed covenant architecture explainer
 assets/
   css/
     game.css              — terminal + chain panel styles
@@ -126,8 +132,8 @@ assets/
       screens.js          — all game screens
       combat.js           — combat math
       data.js             — monsters, items, levels, ASCII art
-      state.js            — localStorage state (Phase 1) / UTXO state (Phase 2)
-      chain.js            — TN12 WebSocket client + chain panel renderer
+      state.js            — localStorage (Phase 0-1) / UTXO state (Phase 2)
+      chain.js            — wRPC WebSocket client + chain panel
 contracts/                — SilverScript source (Phase 2)
   player.ss
   game.ss
@@ -139,8 +145,9 @@ proofs/                   — RISC Zero guest programs (Phase 2)
 ```
 
 ## Open Questions
-- [ ] Public TN12 node endpoint — run our own or wait for community infra?
-- [ ] Faucet — need test KAS for Phase 2. CPU mine or request from team?
+- [ ] Does kaspa-wasm support covenant script construction in browser?
+- [ ] TN12 node hosting — run our own or community endpoint?
+- [ ] Faucet — need test KAS for Phase 2 (CPU mine or request from team?)
 - [ ] SilverScript stability — compiler API may change before mainnet (May 5, 2026)
-- [ ] Wallet integration — browser extension vs embedded keypair?
-- [ ] Verifiable randomness — use block hash as seed for monster selection? Fair enough for demo?
+- [ ] Verifiable randomness — block hash as monster seed fair enough for demo?
+- [ ] Browser wallet extensions — will KasWare add covenant tx support?
