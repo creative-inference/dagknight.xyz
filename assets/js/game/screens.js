@@ -76,10 +76,32 @@ async function screenNewGame() {
 
   window._state = GameState.newGame(name.trim().slice(0, 20), classKey);
   GameState.save(window._state);
-  Chain.emitCovenantTx('Player::create', `New Player UTXO — ${window._state.name} the ${CLASSES[classKey].name}`);
 
   E.blank();
   E.gold(`  Welcome, ${window._state.name} the ${CLASSES[classKey].name}.`);
+  E.blank();
+
+  // Fund player wallet on TN12
+  E.dim('  Forging your identity on the BlockDAG...');
+  try {
+    const result = await Wallet.fund();
+    if (result.alreadyFunded) {
+      E.cyan('  Wallet already funded on TN12.');
+    } else {
+      E.cyan(`  1 KAS deposited to your wallet on TN12.`);
+      E.dim(`  TX: ${result.txId.substring(0, 24)}...`);
+    }
+    Chain.emitCovenantTx('Player::create', `New Player UTXO — ${window._state.name} the ${CLASSES[classKey].name}`);
+  } catch (err) {
+    E.dim(`  Wallet funding skipped: ${err.message}`);
+    Chain.emitCovenantTx('Player::create (sim)', `${window._state.name} — offline mode`);
+  }
+
+  if (Wallet.address) {
+    E.dim(`  Address: ${Wallet.address.substring(0, 30)}...`);
+  }
+
+  E.blank();
   E.line('  The DAG Gate opens before you...');
   await E.pause();
   await screenTown();

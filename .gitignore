@@ -7,3 +7,4 @@ Gemfile.lock
 .DS_Store
 node_modules/
 test-wrpc.html
+assets/wasm/

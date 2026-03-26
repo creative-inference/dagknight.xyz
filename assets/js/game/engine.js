@@ -13,6 +13,7 @@ const E = {
     this._output = document.getElementById('terminal-output');
     this._input = document.getElementById('terminal-input');
     this._field = document.getElementById('input-field');
+    Wallet.init();
     screenTitle();
   },
 
