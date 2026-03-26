@@ -165,8 +165,59 @@ const Covenant = {
     tx.inputs[0].signatureScript = sigHex + selectorHex + '4c' + redeemLenHex + currentScript;
 
     return await this._submitTx(tx);
+  },
 
-    tx.inputs[0].signatureScript = sigScript;
+  // Spend the Player covenant — update state and recreate
+  async updatePlayerUtxo(kaspa, privateKey, pubkeyHex,
+    curHp, curGold, curLevel,
+    newHp, newGold, newLevel,
+    covenantUtxo
+  ) {
+    const currentScript = this.buildPlayerScript(pubkeyHex, curHp, curGold, curLevel);
+    const newScript = this.buildPlayerScript(pubkeyHex, newHp, newGold, newLevel);
+
+    // New P2SH output with updated state
+    const newCovenantSpk = kaspa.ScriptBuilder.fromScript(newScript).createPayToScriptHashScript();
+
+    const covenantValue = BigInt(covenantUtxo.utxoEntry.amount);
+    const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
+    const outValue = covenantValue - fee;
+
+    const outpoint = { transactionId: covenantUtxo.outpoint.transactionId, index: covenantUtxo.outpoint.index };
+    const onChainSpk = kaspa.ScriptBuilder.fromScript(currentScript).createPayToScriptHashScript();
+
+    const inputs = [{
+      previousOutpoint: outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+      utxo: {
+        outpoint, amount: covenantValue, scriptPublicKey: onChainSpk,
+        blockDaaScore: BigInt(covenantUtxo.utxoEntry.blockDaaScore || 0), isCoinbase: false,
+      },
+    }];
+
+    // Output: new covenant UTXO with updated state
+    const outputs = [{ value: outValue, scriptPublicKey: newCovenantSpk }];
+
+    const tx = new kaspa.Transaction({
+      version: 0, inputs, outputs,
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const sig = kaspa.createInputSignature(tx, 0, privateKey);
+
+    // sig_script: <sig_push> <newHp_push> <newGold_push> <newLevel_push> <OP_0> <redeem_push>
+    // sig already has push opcode from createInputSignature
+    // args need ScriptBuilder push encoding
+    const argsPush = new kaspa.ScriptBuilder()
+      .addI64(BigInt(newHp))
+      .addI64(BigInt(newGold))
+      .addI64(BigInt(newLevel))
+      .toString();
+
+    const redeemLen = currentScript.length / 2;
+    const redeemLenHex = redeemLen.toString(16).padStart(2, '0');
+
+    // OP_0 = 0x00 for function selector (update is function 0)
+    tx.inputs[0].signatureScript = sig + argsPush + '00' + '4c' + redeemLenHex + currentScript;
 
     return await this._submitTx(tx);
   },
@@ -252,4 +303,28 @@ window.testCovenantWithdraw = async function() {
     console.log('WITHDRAW SUCCESS:', txId);
     return txId;
   } catch (e) { console.error('Withdraw failed:', e.message); }
+};
+
+window.testCovenantUpdate = async function() {
+  console.log('=== Testing Covenant Update ===');
+  await Wallet.ensureAddress();
+  const kaspa = Wallet._kaspa;
+  const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+  const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+
+  // Find covenant at hp=20, gold=0, level=1 (initial state)
+  const utxo = await Covenant.findCovenantUtxo(kaspa, pub, 20, 0, 1);
+  if (!utxo) { console.error('No covenant UTXO found at (20,0,1)'); return; }
+  console.log('Found:', utxo);
+  console.log('Updating: hp 20→20, gold 0→0, level 1→1 (same state — test basic spend)');
+  try {
+    const txId = await Covenant.updatePlayerUtxo(
+      kaspa, pk, pub,
+      20, 0, 1,     // current state
+      20, 0, 1,     // new state (SAME — test that covenant accepts recreation)
+      utxo
+    );
+    console.log('UPDATE SUCCESS:', txId);
+    return txId;
+  } catch (e) { console.error('Update failed:', e.message); }
 };
