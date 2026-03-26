@@ -100,12 +100,31 @@ async function screenNewGame() {
     spin.stop(`Wallet funding skipped: ${err.message}`, 't-dim');
   }
 
-  if (typeof Chain !== 'undefined') {
-    chainEmit('Player::create', `New Player UTXO — ${window._state.name} the ${CLASSES[classKey].name}`);
-  }
-
   if (Wallet.address) {
     E.dim(`  Address: ${Wallet.address.substring(0, 30)}...`);
+  }
+
+  // Create Player covenant UTXO on TN12
+  if (Wallet._kaspa && Wallet._privateKeyHex && Wallet.funded) {
+    const covSpin = E.spinner('Inscribing covenant on the BlockDAG...');
+    try {
+      const pk = new Wallet._kaspa.PrivateKey(Wallet._privateKeyHex);
+      const pubkeyHex = pk.toPublicKey().toString();
+      const s = window._state;
+      const utxos = await Covenant.getUtxos(Wallet.address);
+      const txId = await Covenant.createPlayerUtxo(
+        Wallet._kaspa, pk, pubkeyHex,
+        s.hp, s.gold, 1, utxos
+      );
+      covSpin.stop('Player covenant UTXO created on TN12!', 't-cyan');
+      E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
+      chainEmit('Player::create', `Covenant UTXO — ${s.name} the ${CLASSES[classKey].name}`);
+    } catch (err) {
+      covSpin.stop(`Covenant creation skipped: ${err.message}`, 't-dim');
+      chainEmit('Player::create (sim)', `${window._state.name} — localStorage only`);
+    }
+  } else {
+    chainEmit('Player::create (sim)', `${window._state.name} — localStorage only`);
   }
 
   E.blank();
