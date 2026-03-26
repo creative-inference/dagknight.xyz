@@ -54,6 +54,28 @@ const E = {
     this._append(`<span class="line-ascii">${esc(text)}</span>\n`);
   },
 
+  // Animated spinner — returns a stop() function
+  spinner(text) {
+    const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    const el = document.createElement('span');
+    el.className = 'line t-gold';
+    el.textContent = `  ${frames[0]} ${text}`;
+    this._output.appendChild(el);
+    this._output.scrollTop = this._output.scrollHeight;
+    let i = 0;
+    const iv = setInterval(() => {
+      i = (i + 1) % frames.length;
+      el.textContent = `  ${frames[i]} ${text}`;
+    }, 80);
+    return {
+      stop(msg, cls) {
+        clearInterval(iv);
+        el.className = `line ${cls || 't-cyan'}`;
+        el.textContent = `  ${msg}`;
+      }
+    };
+  },
+
   // Show numbered menu, return selected key
   menu(options) {
     return new Promise(resolve => {

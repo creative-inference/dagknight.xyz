@@ -87,17 +87,17 @@ async function screenNewGame() {
   E.blank();
 
   // Fund player wallet on TN12
-  E.dim('  Forging your identity on the BlockDAG...');
+  const spin = E.spinner('Forging your identity on the BlockDAG...');
   try {
     const result = await Wallet.fund();
     if (result.alreadyFunded) {
-      E.cyan('  Wallet already funded on TN12.');
+      spin.stop('Wallet already funded on TN12.', 't-cyan');
     } else {
-      E.cyan(`  1 KAS deposited to your wallet on TN12.`);
+      spin.stop('1 KAS deposited to your wallet on TN12.', 't-cyan');
       E.dim(`  TX: ${result.txId.substring(0, 24)}...`);
     }
   } catch (err) {
-    E.dim(`  Wallet funding skipped: ${err.message}`);
+    spin.stop(`Wallet funding skipped: ${err.message}`, 't-dim');
   }
 
   if (typeof Chain !== 'undefined') {
