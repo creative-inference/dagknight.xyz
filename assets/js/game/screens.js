@@ -111,7 +111,7 @@ async function screenNewGame() {
     const covSpin = E.spinner('Inscribing covenant on the BlockDAG...');
     try {
       const pk = new Wallet._kaspa.PrivateKey(Wallet._privateKeyHex);
-      const pubkeyHex = pk.toPublicKey().toString();
+      const pubkeyHex = pk.toPublicKey().toXOnlyPublicKey().toString();
       const s = window._state;
       // Wait for faucet tx to confirm
       let utxos = await Covenant.getUtxos(Wallet.address);
@@ -122,7 +122,7 @@ async function screenNewGame() {
         retries++;
       }
       const txId = await Covenant.createPlayerUtxo(
-        Wallet._kaspa, pk, pubkeyHex, 1, utxos
+        Wallet._kaspa, pk, pubkeyHex, s.hp, s.gold, 1, utxos
       );
       covSpin.stop('Player covenant UTXO created on TN12!', 't-cyan');
       E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
@@ -329,7 +329,7 @@ async function screenCombat(monster) {
       if (Wallet._kaspa && Wallet._privateKeyHex && Wallet.funded) {
         try {
           const pk = new Wallet._kaspa.PrivateKey(Wallet._privateKeyHex);
-          const pubkeyHex = pk.toPublicKey().toString();
+          const pubkeyHex = pk.toPublicKey().toXOnlyPublicKey().toString();
           // Search for covenant at any previous level (may not have been updated on-chain)
           let covUtxo = null;
           let onChainLevel = s.level - 1;

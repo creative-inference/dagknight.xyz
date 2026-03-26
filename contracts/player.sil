@@ -1,56 +1,30 @@
 pragma silverscript ^0.1.0;
 
 // =================================================================
-// DAG Gate — Player Covenant (Self-Preserving State)
+// DAG Gate — Player Covenant (KIP-20 Declaration)
 //
-// Follows the simulating_state.sil pattern from kaspanet/silverscript.
-// Constructor params encode the player state. Each spend splices
-// updated values into the script bytecode and recreates the UTXO.
+// Self-preserving UTXO using covenant declarations.
+// State carries forward via the State struct.
+// Auth binding: only the owner can update.
 // =================================================================
 
-contract Player(
-    pubkey owner,
-    int hp,
-    int gold,
-    int level
-) {
-    // --- Update state after game action ---
-    entrypoint function update(
-        sig ownerSig,
-        int newHp,
-        int newGold,
-        int newLevel
-    ) {
-        // Only owner can update
-        require(checkSig(ownerSig, owner));
+contract Player(pubkey owner, int init_hp, int init_gold, int init_level) {
+    int hp = init_hp;
+    int gold = init_gold;
+    int level = init_level;
 
-        // Basic validation
+    // --- Update: self-preserving 1:1 transition ---
+    // After combat, shopping, resting — update state and recreate covenant.
+    #[covenant(from = 1, to = 1)]
+    function update(State prev_state, sig ownerSig, int newHp, int newGold, int newLevel) : (State) {
+        require(checkSig(ownerSig, owner));
         require(newHp >= 0);
         require(newGold >= 0);
-        require(newLevel >= level);
-
-        // Stake carries forward
-        int minerFee = 1000;
-        require(tx.outputs[0].value >= tx.inputs[this.activeInputIndex].value - minerFee);
-
-        // Splice updated state into script bytecode
-        // Constructor params pushed in reverse: level, gold, hp, owner
-        // level = 8 bytes (OP_PUSHBYTES_8 + int64 LE = 9 bytes)
-        // gold  = 9 bytes
-        // hp    = 9 bytes
-        // owner = 33 bytes (OP_PUSHBYTES_32 + 32 bytes)
-        // Total prefix = 9 + 9 + 9 + 33 = 60 bytes
-
-        // Build new script: replace first 27 bytes (level+gold+hp) with new values
-        byte[] tail = this.activeScriptPubKey.split(27)[1];
-        byte[] newScript = 0x08 + byte[8](newLevel) + 0x08 + byte[8](newGold) + 0x08 + byte[8](newHp) + tail;
-
-        // Verify output recreates the covenant with new state
-        byte[35] newLock = new ScriptPubKeyP2SH(blake2b(newScript));
-        require(tx.outputs[0].scriptPubKey == newLock);
+        require(newLevel >= prev_state.level);
+        return({ hp: newHp, gold: newGold, level: newLevel });
     }
 
-    // --- Withdraw (destroy character, reclaim KAS) ---
+    // --- Withdraw: destroy covenant, reclaim KAS ---
     entrypoint function withdraw(sig ownerSig) {
         require(checkSig(ownerSig, owner));
     }
