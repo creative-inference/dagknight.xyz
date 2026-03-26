@@ -1,0 +1,188 @@
+---
+layout: default
+title: "The Covenant Forge — Innovation Behind The DAG Gate"
+description: "How ancient covenant magic and BlockDAG sorcery combine to create trustless gaming"
+---
+
+<div class="hero" style="padding: 5rem 2rem 3rem;">
+  <div class="hero-content">
+    <div class="hero-emblem">&#x2728;</div>
+    <h1>The <span class="highlight">Covenant Forge</span></h1>
+    <p class="subtitle">&#x2726; Where Spells Are Cast in Script &#x2726;</p>
+    <p class="tagline">
+      Every innovation forged here was once thought impossible.
+      A game that needs no server. Characters that live on-chain.
+      Combat validated by mathematics alone.
+    </p>
+  </div>
+</div>
+
+<div class="rune-divider">&#x16A0; &#x16B1; &#x16A2; &#x16B7; &#x16A6;</div>
+
+<section class="section">
+  <div style="max-width: 800px; margin: 0 auto; padding: 0 1rem;">
+
+    <h2 class="section-title">The <span class="gold">Heresy</span></h2>
+    <p style="color: var(--text); font-size: 1.05rem; line-height: 1.8; margin-bottom: 2rem;">
+      In the old world, every game needed a lord &mdash; a server, a database,
+      a sysop who held the keys to the kingdom. Your character existed at their pleasure.
+      Your gold was entries in their ledger. Your victories were rows in their tables.
+      One corrupted backup, one unpaid hosting bill, and your knight was dust.
+    </p>
+    <p style="color: var(--text); font-size: 1.05rem; line-height: 1.8; margin-bottom: 2rem;">
+      The DAG Gate commits heresy against this order. It declares that a game
+      can run with <strong>no server at all</strong>. That a character sheet can be
+      a self-sovereign artifact on a blockchain. That the rules of combat can be
+      enforced by mathematics, not moderators. That the BlockDAG itself is the
+      only lord this realm needs.
+    </p>
+
+    <div class="rune-divider" style="margin: 2rem 0;">&#x2694;</div>
+
+    <h2 class="section-title">The <span class="teal">Five Innovations</span></h2>
+
+    <div class="pillars" style="margin-bottom: 2rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x1F4DC;</div>
+        <h3>Self-Preserving UTXOs</h3>
+        <p>
+          In the old magic, when a coin was spent it vanished forever. The covenant
+          smiths of Kaspa forged a different enchantment: a UTXO that <em>refuses to die</em>.
+          When spent, it forces the spending transaction to recreate it with updated state.
+          Your character sheet is not a database row &mdash; it is a living chain of
+          covenant-enforced outputs, each link a validated state transition. The knight
+          transforms but never perishes. HP changes, gold flows, levels rise &mdash; but the
+          UTXO endures, carrying its history in the very fabric of the BlockDAG.
+        </p>
+      </div>
+    </div>
+
+    <div class="pillars" style="margin-bottom: 2rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x26D3;</div>
+        <h3>Inter-Covenant Communication</h3>
+        <p>
+          A single covenant acting alone is a sword without a wielder. The true power
+          emerges when covenants <em>speak to one another</em> within the crucible of
+          a single atomic transaction. When a knight purchases a blade at the Hash Bazaar,
+          two covenants &mdash; Player and Shop &mdash; validate their halves of the bargain
+          simultaneously. Neither executes the other's logic. Neither trusts the other.
+          They verify each other's presence in the transaction, and the atomicity of the
+          BlockDAG guarantees that either both succeed or both fail. This is ICC:
+          trustless commerce between sovereign programs.
+        </p>
+      </div>
+    </div>
+
+    <div class="pillars" style="margin-bottom: 2rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x1F52E;</div>
+        <h3>Zero-Knowledge Proof Verification</h3>
+        <p>
+          The combat rules of The DAG Gate are too complex for raw script execution.
+          Chess moves, damage calculations, experience curves &mdash; these demand
+          computational space that no L1 should bear. So the computation happens
+          off-chain, in a RISC Zero guest program, and the result is distilled into
+          a single cryptographic proof. The L1 verifies this proof in 140 sigops
+          via <code>OpZkPrecompile</code>. The chain never learns the rules of combat.
+          It never re-executes the math. It simply confirms that someone, somewhere,
+          ran the correct program and produced the correct result. The truth of the
+          proof is all the chain needs.
+        </p>
+      </div>
+    </div>
+
+    <div class="pillars" style="margin-bottom: 2rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x23F0;</div>
+        <h3>Protocol-Native Time</h3>
+        <p>
+          In the old BBS games, daily fight limits were enforced by the server's clock.
+          Reset at midnight, central time, because that's when the sysop's cron job ran.
+          On the BlockDAG, time is woven into the protocol itself. The opcode
+          <code>this.age</code> reads how many seconds a UTXO has existed. A covenant
+          can demand <code>require(this.age &gt; 86400)</code> and no force in the realm
+          can circumvent it. The daily reset is not a feature of the application &mdash;
+          it is a property of the physics of the chain. No server clock. No admin override.
+          Just the immutable passage of block time.
+        </p>
+      </div>
+    </div>
+
+    <div class="pillars" style="margin-bottom: 2rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x1F310;</div>
+        <h3>The Browser Is the Client</h3>
+        <p>
+          There is no backend. There is no API server. There is no middleware, no
+          load balancer, no container orchestration. The game runs as static HTML,
+          CSS, and JavaScript on GitHub Pages. The browser loads a WebAssembly SDK,
+          generates a keypair, builds transactions, signs them locally, and submits
+          them directly to the Kaspa network. The entire server infrastructure for
+          this game is a single Kaspa node &mdash; the same node every miner already runs.
+          The game is a web page. The server is the BlockDAG. The gap between them
+          is a single WebSocket connection.
+        </p>
+      </div>
+    </div>
+
+    <div class="rune-divider" style="margin: 2rem 0;">&#x2694;</div>
+
+    <h2 class="section-title">The <span class="gold">Lineage</span></h2>
+    <p style="color: var(--text); font-size: 1.05rem; line-height: 1.8; margin-bottom: 1.5rem;">
+      The DAG Gate stands on the shoulders of those who proved this magic real.
+    </p>
+    <p style="color: var(--text-dim); line-height: 1.8; margin-bottom: 1rem;">
+      <strong style="color: var(--accent-gold);">Michael Sutton</strong> and
+      <strong style="color: var(--accent-gold);">IzioDev</strong> built the first
+      trustless chess game on Kaspa &mdash; ZK-verified moves, covenant-enforced board state,
+      real KAS stakes. Their
+      <a href="https://www.youtube.com/watch?v=9t-14LJySlk&t=2875s" target="_blank" rel="noopener" style="color: var(--primary);">
+        covenants breakdown
+      </a>
+      proved that Kaspa's UTXO model could carry complex application state.
+      The chess demo inspired The DAG Gate's architecture: if a chessboard can live
+      on-chain, so can an entire RPG.
+    </p>
+    <p style="color: var(--text-dim); line-height: 1.8; margin-bottom: 2rem;">
+      <strong style="color: var(--accent-gold);">SilverScript</strong> &mdash; Ori Newman's
+      covenant compiler &mdash; transforms high-level contract declarations into native
+      Kaspa script. Our Player covenant compiles from human-readable policy functions
+      into 408 bytes of bytecode that the L1 executes directly. No VM. No interpreter.
+      Pure script.
+    </p>
+
+    <div class="rune-divider" style="margin: 2rem 0;">&#x2694;</div>
+
+    <h2 class="section-title">The <span class="teal">Proof</span></h2>
+    <p style="color: var(--text); font-size: 1.05rem; line-height: 1.8; margin-bottom: 1.5rem;">
+      These are not theoretical claims. Every innovation listed above has been
+      demonstrated on Kaspa Testnet-12:
+    </p>
+    <ul style="color: var(--text-dim); font-size: 0.95rem; list-style: none; padding: 0; line-height: 2.4; margin-bottom: 2rem;">
+      <li style="color: var(--primary);">&#x2705; SilverScript covenant compiled and deployed as a P2SH UTXO on TN12</li>
+      <li style="color: var(--primary);">&#x2705; Covenant UTXO spent from a browser &mdash; signature verified on-chain</li>
+      <li style="color: var(--primary);">&#x2705; Transaction construction in browser via <code>@kasdk/web</code> WASM SDK</li>
+      <li style="color: var(--primary);">&#x2705; Faucet Cloud Function auto-funds new players with 1 test KAS</li>
+      <li style="color: var(--primary);">&#x2705; Live TN12 block feed displayed alongside the game terminal</li>
+      <li style="color: var(--primary);">&#x2705; Full game loop playable today &mdash; forest combat, shop, inn, PvP</li>
+    </ul>
+
+    <div class="game-tech-note">
+      <h3>The Oath</h3>
+      <p style="color: var(--text-dim); text-align: center; font-style: italic; line-height: 1.8;">
+        "In 1991, LORD needed a BBS server.<br>
+        In 2026, the BlockDAG is the server.<br>
+        Every fight is a state transition.<br>
+        Every level-up, a covenant-enforced UTXO.<br>
+        No trusted host. No admin. Just math."
+      </p>
+    </div>
+
+    <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 2.5rem; flex-wrap: wrap;">
+      <a href="{{ '/game/' | relative_url }}" class="btn btn-primary" style="text-decoration: none;">Play The DAG Gate</a>
+      <a href="{{ '/game/plan/' | relative_url }}" class="btn btn-outline" style="text-decoration: none;">View the Plan</a>
+    </div>
+
+  </div>
+</section>
