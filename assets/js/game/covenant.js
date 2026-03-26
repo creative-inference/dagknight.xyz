@@ -5,57 +5,43 @@
 
 const COVENANT_TN12_API = 'https://api-tn12.kaspa.org';
 
-// Compiled Player covenant bytecode (from silverc)
-// Contains dummy pubkey 0101...01 (32 bytes) that must be replaced
-// Constructor params baked in: owner(pubkey), hp(int), gold(int), level(int)
-const PLAYER_SCRIPT_TEMPLATE = '6b6c76009c63755379200101010101010101010101010101010101010101010101010101010101010101ac69527900a269517900a269007951a26900c2b9be02e80394a26900c358527958cd7e587e537958cd7e587e547958cd7eb9bf82011b7c7f7eaa02000001aa7e01207e7c7e01877e876975757575516776519c63750079200101010101010101010101010101010101010101010101010101010101010101ac697551677500696868';
+// Compiled Player covenant bytecode (from silverc with dummy values)
+// Pubkey at offsets 10-41 and 131-162 (dummy: 0x01 x32)
+// Level at offset 56 (byte after 0x01 push opcode at offset 55)
+// hp and gold are runtime args, not baked in
+const PLAYER_SCRIPT_TEMPLATE = '6b6c76009c6375537920{PUBKEY}ac69527900a269517900a26900790{LEVEL}a26900c2b9be02e80394a26900c358527958cd7e587e537958cd7e587e547958cd7eb9bf82011b7c7f7eaa02000001aa7e01207e7c7e01877e876975757575516776519c637500792{PUBKEY}ac697551677500696868';
 
-// Dummy pubkey used during compilation (32 bytes of 0x01)
-const DUMMY_PUBKEY = '01'.repeat(32);
+// Note: level=1 encodes as "151" (OP_1), level=2-16 as "52"-"60"
+// For level > 16, it's "01{hex}" (OP_PUSHBYTES_1 + byte)
+function encodeLevelOpcode(level) {
+  if (level === 0) return '00';           // OP_0
+  if (level >= 1 && level <= 16) return (80 + level).toString(16); // OP_1 through OP_16
+  // For values > 16, use OP_PUSHBYTES_1 + byte
+  return '01' + level.toString(16).padStart(2, '0');
+}
 
 const Covenant = {
 
-  // Replace the dummy pubkey in the template with the real player pubkey
-  // and splice in initial state values (hp, gold, level)
-  buildPlayerScript(pubkeyHex, hp, gold, level) {
-    // The constructor params are pushed in reverse order in the bytecode:
-    //   level(int8), gold(int8), hp(int8), owner(pubkey32)
-    // Each int is: 0x08 + 8-byte LE int64
-    // Pubkey is: 0x20 + 32-byte key
-    //
-    // We need to replace both occurrences of the dummy pubkey
-    // and the int values preceding them
-
-    let script = PLAYER_SCRIPT_TEMPLATE;
-
-    // Replace both dummy pubkey occurrences with real pubkey
-    script = script.replaceAll(DUMMY_PUBKEY, pubkeyHex);
-
-    // TODO: Replace the int state values (hp, gold, level) in the bytecode
-    // For now, the initial values from compilation (hp=20, gold=0, level=1) are baked in
-    // Full state splicing will be implemented after testing basic covenant creation
-
+  // Build the covenant script with real pubkey and level
+  buildPlayerScript(pubkeyHex, level) {
+    const levelHex = encodeLevelOpcode(level);
+    let script = PLAYER_SCRIPT_TEMPLATE
+      .replaceAll('{PUBKEY}', pubkeyHex)
+      .replace('{LEVEL}', levelHex);
     return script;
   },
 
   // Create a Player covenant UTXO on TN12
-  // Returns the transaction ID
-  async createPlayerUtxo(kaspa, privateKey, pubkeyHex, hp, gold, level, fundingUtxos) {
-    const script = this.buildPlayerScript(pubkeyHex, hp, gold, level);
-
-    // Wrap as P2SH: OP_BLAKE2B <script_hash> OP_EQUAL
-    // The redeem script is the full covenant script
-    // The output scriptPublicKey is: 0xaa 0x20 <32-byte-blake2b-hash> 0x87
+  async createPlayerUtxo(kaspa, privateKey, pubkeyHex, level, fundingUtxos) {
+    const script = this.buildPlayerScript(pubkeyHex, level);
     const scriptBuilder = kaspa.ScriptBuilder.fromScript(script);
     const p2shSpk = scriptBuilder.createPayToScriptHashScript();
 
-
-    // Build transaction
     const playerAddress = privateKey.toAddress('testnet-12');
     const playerSpk = kaspa.payToAddressScript(playerAddress);
 
-    // Filter to only UTXOs with enough value
     const validUtxos = fundingUtxos.filter(u => BigInt(u.utxoEntry?.amount || 0) > 0n);
+    if (validUtxos.length === 0) throw new Error('No UTXOs available');
 
     const inputs = validUtxos.map(utxo => {
       const outpoint = {
@@ -77,39 +63,123 @@ const Covenant = {
       };
     });
 
-    if (inputs.length === 0) {
-      throw new Error('No UTXOs available to fund covenant');
-    }
-
     let totalInput = 0n;
     for (const inp of inputs) totalInput += inp.utxo.amount;
 
-    const covenantValue = 50000000n; // 0.5 KAS locked in covenant
+    const covenantValue = 50000000n; // 0.5 KAS locked
     const fee = 10000n;
+    if (totalInput < covenantValue + fee) throw new Error('Insufficient funds');
     const change = totalInput - covenantValue - fee;
 
-    const outputs = [
-      { value: covenantValue, scriptPublicKey: p2shSpk },
-    ];
-
-    if (change > 0n) {
-      outputs.push({ value: change, scriptPublicKey: playerSpk });
-    }
+    const outputs = [{ value: covenantValue, scriptPublicKey: p2shSpk }];
+    if (change > 0n) outputs.push({ value: change, scriptPublicKey: playerSpk });
 
     const tx = new kaspa.Transaction({
-      version: 0,
-      inputs,
-      outputs,
-      lockTime: 0n,
-      subnetworkId: '0000000000000000000000000000000000000000',
-      gas: 0n,
-      payload: '',
+      version: 0, inputs, outputs,
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000',
+      gas: 0n, payload: '',
     });
 
-    // Sign
+    const signedTx = kaspa.signTransaction(tx, [privateKey], false);
+    return await this._submitTx(signedTx);
+  },
+
+  // Spend the Player covenant UTXO to update state (level up)
+  // This consumes the current covenant UTXO and creates a new one with updated level
+  async spendPlayerUtxo(kaspa, privateKey, pubkeyHex, currentLevel, newLevel, covenantUtxo) {
+    // Current covenant script (the one being spent)
+    const currentScript = this.buildPlayerScript(pubkeyHex, currentLevel);
+    const currentScriptBytes = hexToBytes(currentScript);
+
+    // New covenant script with updated level
+    const newScript = this.buildPlayerScript(pubkeyHex, newLevel);
+    const newScriptBuilder = kaspa.ScriptBuilder.fromScript(newScript);
+    const newP2shSpk = newScriptBuilder.createPayToScriptHashScript();
+
+    const covenantValue = BigInt(covenantUtxo.utxoEntry.amount);
+    const fee = 10000n;
+    const outValue = covenantValue - fee;
+
+    // The P2SH scriptPublicKey of the current covenant
+    const currentScriptBuilder = kaspa.ScriptBuilder.fromScript(currentScript);
+    const currentP2shSpk = currentScriptBuilder.createPayToScriptHashScript();
+
+    // Build the sig_script (witness) for spending:
+    // For the "update" function: <newLevel> <newGold> <newHp> <ownerSig> <redeemScript>
+    // Function selector: 0 = update (first entrypoint)
+    // The sig will be added by signTransaction, but P2SH needs the redeem script appended
+
+    const outpoint = {
+      transactionId: covenantUtxo.outpoint.transactionId,
+      index: covenantUtxo.outpoint.index,
+    };
+
+    const inputs = [{
+      previousOutpoint: outpoint,
+      signatureScript: '',
+      sequence: 0n,
+      sigOpCount: 1,
+      utxo: {
+        outpoint,
+        amount: covenantValue,
+        scriptPublicKey: currentP2shSpk,
+        blockDaaScore: BigInt(covenantUtxo.utxoEntry.blockDaaScore || 0),
+        isCoinbase: false,
+      },
+    }];
+
+    const outputs = [{ value: outValue, scriptPublicKey: newP2shSpk }];
+
+    const tx = new kaspa.Transaction({
+      version: 0, inputs, outputs,
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000',
+      gas: 0n, payload: '',
+    });
+
+    // For P2SH spending, we need to construct the signatureScript manually:
+    // <function_args...> <signature> <redeem_script>
+    // The function selector for "update" is pushed first (OP_0 = first function)
+    //
+    // Stack at spend time (pushed in reverse):
+    //   <redeemScript> <ownerSig> <newLevel> <newGold> <newHp> <functionSelector>
+    //
+    // For now, we sign the tx first to get the signature, then build the full sig_script
+
+    // Sign to get the signature
     const signedTx = kaspa.signTransaction(tx, [privateKey], false);
 
-    // Convert to REST API format
+    // Extract the signature from the signed input
+    const signedSigScript = signedTx.inputs[0].signatureScript;
+
+    // Build the P2SH sig_script:
+    // <args> <sig> <serialized_redeem_script>
+    // For the update function: newHp newGold newLevel are on stack
+    // But the compiler handles this internally — we need to understand the exact stack layout
+    //
+    // TODO: This is the hard part — constructing the correct sig_script
+    // that satisfies the covenant's update entrypoint.
+    // For now, submit the signed tx as-is to see what error we get.
+
+    return await this._submitTx(signedTx);
+  },
+
+  // Find the covenant UTXO for a player address
+  async findCovenantUtxo(address, pubkeyHex, level) {
+    const utxos = await this.getUtxos(address);
+    // The covenant UTXO has a P2SH scriptPublicKey, not a regular P2PK
+    // Regular UTXOs start with "20" (OP_PUSHBYTES_32), P2SH starts with "aa" (OP_BLAKE2B)
+    return utxos.find(u => {
+      const spk = u.utxoEntry?.scriptPublicKey?.scriptPublicKey || '';
+      return spk.startsWith('aa');
+    });
+  },
+
+  async getUtxos(address) {
+    const resp = await fetch(`${COVENANT_TN12_API}/addresses/${address}/utxos`);
+    return resp.json();
+  },
+
+  async _submitTx(signedTx) {
     const txJson = signedTx.toJSON();
     const apiTx = {
       version: txJson.version,
@@ -132,7 +202,6 @@ const Covenant = {
       payload: txJson.payload,
     };
 
-    // Submit
     const resp = await fetch(`${COVENANT_TN12_API}/transactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -141,17 +210,11 @@ const Covenant = {
 
     if (!resp.ok) {
       const err = await resp.text();
-      throw new Error(`Covenant tx ${resp.status}: ${err.substring(0, 200)}`);
+      throw new Error(`tx ${resp.status}: ${err.substring(0, 200)}`);
     }
 
     const result = await resp.json();
     return result.transactionId || signedTx.finalize().toString();
-  },
-
-  // Fetch player's UTXOs from TN12
-  async getUtxos(address) {
-    const resp = await fetch(`${COVENANT_TN12_API}/addresses/${address}/utxos`);
-    return resp.json();
   },
 };
 
@@ -161,4 +224,8 @@ function hexToBytes(hex) {
     bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
   }
   return bytes;
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }

@@ -120,8 +120,7 @@ async function screenNewGame() {
         retries++;
       }
       const txId = await Covenant.createPlayerUtxo(
-        Wallet._kaspa, pk, pubkeyHex,
-        s.hp, s.gold, 1, utxos
+        Wallet._kaspa, pk, pubkeyHex, 1, utxos
       );
       covSpin.stop('Player covenant UTXO created on TN12!', 't-cyan');
       E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
@@ -323,6 +322,24 @@ async function screenCombat(monster) {
       E.ascii(LEVELUP_ART);
       E.gold(`  ★ LEVEL UP! You are now level ${s.level}!`);
       chainEmit('Player::level_up', `Level ${s.level} — ${titleForLevel(s.level)} | Stats recalculated via ZK proof`);
+
+      // Update covenant UTXO on TN12 with new level
+      if (Wallet._kaspa && Wallet._privateKeyHex && Wallet.funded) {
+        try {
+          const pk = new Wallet._kaspa.PrivateKey(Wallet._privateKeyHex);
+          const pubkeyHex = pk.toPublicKey().toString();
+          const covUtxo = await Covenant.findCovenantUtxo(Wallet.address, pubkeyHex, s.level - 1);
+          if (covUtxo) {
+            const txId = await Covenant.spendPlayerUtxo(
+              Wallet._kaspa, pk, pubkeyHex, s.level - 1, s.level, covUtxo
+            );
+            E.dim(`  Covenant updated on TN12: ${txId.substring(0, 20)}...`);
+            chainEmit('Player::spend', `Covenant UTXO spent — level ${s.level - 1} → ${s.level}`);
+          }
+        } catch (err) {
+          E.dim(`  On-chain update skipped: ${err.message.substring(0, 60)}`);
+        }
+      }
       E.gold(`  ★ Title: ${titleForLevel(s.level)}`);
       E.line(`  HP: ${s.maxHp}  ATK: ${s.attack}  DEF: ${s.defense}`);
       if (s.level >= 12) {
