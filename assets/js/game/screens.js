@@ -111,7 +111,14 @@ async function screenNewGame() {
       const pk = new Wallet._kaspa.PrivateKey(Wallet._privateKeyHex);
       const pubkeyHex = pk.toPublicKey().toString();
       const s = window._state;
-      const utxos = await Covenant.getUtxos(Wallet.address);
+      // Wait for faucet tx to confirm
+      let utxos = await Covenant.getUtxos(Wallet.address);
+      let retries = 0;
+      while ((!utxos || utxos.length === 0) && retries < 10) {
+        await new Promise(r => setTimeout(r, 2000));
+        utxos = await Covenant.getUtxos(Wallet.address);
+        retries++;
+      }
       const txId = await Covenant.createPlayerUtxo(
         Wallet._kaspa, pk, pubkeyHex,
         s.hp, s.gold, 1, utxos

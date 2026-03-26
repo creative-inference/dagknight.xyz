@@ -43,16 +43,21 @@ const Covenant = {
   async createPlayerUtxo(kaspa, privateKey, pubkeyHex, hp, gold, level, fundingUtxos) {
     const script = this.buildPlayerScript(pubkeyHex, hp, gold, level);
 
-    // Build P2SH output: hash the script, create pay-to-script-hash
-    const scriptBytes = hexToBytes(script);
-    // The ScriptPublicKey wraps the raw script
-    const spk = new kaspa.ScriptPublicKey(0, script);
+    // Wrap as P2SH: OP_BLAKE2B <script_hash> OP_EQUAL
+    // The redeem script is the full covenant script
+    // The output scriptPublicKey is: 0xaa 0x20 <32-byte-blake2b-hash> 0x87
+    const scriptBuilder = kaspa.ScriptBuilder.fromScript(script);
+    const p2shSpk = scriptBuilder.createPayToScriptHashScript();
+
 
     // Build transaction
     const playerAddress = privateKey.toAddress('testnet-12');
     const playerSpk = kaspa.payToAddressScript(playerAddress);
 
-    const inputs = fundingUtxos.map(utxo => {
+    // Filter to only UTXOs with enough value
+    const validUtxos = fundingUtxos.filter(u => BigInt(u.utxoEntry?.amount || 0) > 0n);
+
+    const inputs = validUtxos.map(utxo => {
       const outpoint = {
         transactionId: utxo.outpoint.transactionId,
         index: utxo.outpoint.index,
@@ -72,6 +77,10 @@ const Covenant = {
       };
     });
 
+    if (inputs.length === 0) {
+      throw new Error('No UTXOs available to fund covenant');
+    }
+
     let totalInput = 0n;
     for (const inp of inputs) totalInput += inp.utxo.amount;
 
@@ -80,7 +89,7 @@ const Covenant = {
     const change = totalInput - covenantValue - fee;
 
     const outputs = [
-      { value: covenantValue, scriptPublicKey: spk },
+      { value: covenantValue, scriptPublicKey: p2shSpk },
     ];
 
     if (change > 0n) {
@@ -132,7 +141,7 @@ const Covenant = {
 
     if (!resp.ok) {
       const err = await resp.text();
-      throw new Error(`Covenant tx failed: ${err}`);
+      throw new Error(`Covenant tx ${resp.status}: ${err.substring(0, 200)}`);
     }
 
     const result = await resp.json();
