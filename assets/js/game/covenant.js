@@ -95,7 +95,7 @@ const Covenant = {
 
     const outpoint = { transactionId: covenantUtxo.outpoint.transactionId, index: covenantUtxo.outpoint.index };
 
-    // Try using the P2SH scriptPublicKey (the on-chain value) for signing hash
+    // P2SH signing uses the P2SH scriptPublicKey (confirmed working with withdraw)
     const onChainSpk = kaspa.ScriptBuilder.fromScript(currentScript).createPayToScriptHashScript();
 
     const inputs = [{
