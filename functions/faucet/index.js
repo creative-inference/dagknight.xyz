@@ -21,7 +21,7 @@ let kaspa = null;
 
 async function loadKaspa() {
   if (kaspa) return kaspa;
-  kaspa = require('kaspa-wasm');
+  kaspa = require('@kasdk/nodejs');
   return kaspa;
 }
 
@@ -110,22 +110,35 @@ functions.http('fund', async (req, res) => {
     const recipientAddr = new ksp.Address(address);
     const faucetAddress = new ksp.Address(faucetAddr);
 
-    const inputs = selected.map(utxo => ({
-      previousOutpoint: {
+    const faucetSpk = ksp.payToAddressScript(faucetAddress);
+
+    const inputs = selected.map(utxo => {
+      const outpoint = {
         transactionId: utxo.outpoint.transactionId,
         index: utxo.outpoint.index,
-      },
-      signatureScript: '',
-      sequence: 0n,
-    }));
+      };
+      return {
+        previousOutpoint: outpoint,
+        signatureScript: '',
+        sequence: 0n,
+        sigOpCount: 1,
+        utxo: {
+          outpoint,
+          amount: BigInt(utxo.utxoEntry.amount),
+          scriptPublicKey: faucetSpk,
+          blockDaaScore: BigInt(utxo.utxoEntry.blockDaaScore || 0),
+          isCoinbase: utxo.utxoEntry.isCoinbase || false,
+        },
+      };
+    });
 
     const outputs = [
-      { value: FUND_AMOUNT, scriptPublicKey: recipientAddr.toScriptPublicKey() },
+      { value: FUND_AMOUNT, scriptPublicKey: ksp.payToAddressScript(recipientAddr) },
     ];
 
     const change = total - FUND_AMOUNT - fee;
     if (change > 0n) {
-      outputs.push({ value: change, scriptPublicKey: faucetAddress.toScriptPublicKey() });
+      outputs.push({ value: change, scriptPublicKey: faucetSpk });
     }
 
     const tx = new ksp.Transaction({
@@ -138,26 +151,37 @@ functions.http('fund', async (req, res) => {
       payload: '',
     });
 
-    // Sign inputs
-    const utxoEntries = selected.map(utxo => ({
-      amount: BigInt(utxo.utxoEntry.amount),
-      scriptPublicKey: faucetAddress.toScriptPublicKey(),
-      blockDaaScore: BigInt(utxo.utxoEntry.blockDaaScore || 0),
-      isCoinbase: utxo.utxoEntry.isCoinbase || false,
-    }));
+    // Sign all inputs
+    const signedTx = ksp.signTransaction(tx, [privateKey], false);
 
-    // Sign each input
-    for (let i = 0; i < inputs.length; i++) {
-      const sigHash = ksp.TransactionSigningHash.new(tx, i, utxoEntries[i]);
-      const sig = privateKey.signSchnorr(sigHash);
-      tx.inputs[i].signatureScript = sig.toString() + '01'; // SIGHASH_ALL
-    }
+    // Convert SDK format to REST API format
+    const txJson = signedTx.toJSON();
+    const apiTx = {
+      version: txJson.version,
+      inputs: txJson.inputs.map(inp => ({
+        previousOutpoint: inp.previousOutpoint,
+        signatureScript: inp.signatureScript,
+        sequence: inp.sequence,
+        sigOpCount: inp.sigOpCount,
+      })),
+      outputs: txJson.outputs.map(out => ({
+        amount: out.value,
+        scriptPublicKey: {
+          version: out.scriptPublicKey.version,
+          scriptPublicKey: out.scriptPublicKey.script,
+        },
+      })),
+      lockTime: txJson.lockTime,
+      subnetworkId: txJson.subnetworkId,
+      gas: txJson.gas,
+      payload: txJson.payload,
+    };
 
     // Submit via REST API
     const submitResp = await fetch(`${TN12_API}/transactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transaction: tx.toJSON() }),
+      body: JSON.stringify({ transaction: apiTx }, (_, v) => typeof v === 'bigint' ? v.toString() : v),
     });
 
     if (!submitResp.ok) {
@@ -167,7 +191,7 @@ functions.http('fund', async (req, res) => {
     }
 
     const result = await submitResp.json();
-    const txId = result.transactionId || tx.finalize().toString();
+    const txId = result.transactionId || signedTx.finalize().toString();
 
     // Record in Firestore
     await recordFund(address, txId);

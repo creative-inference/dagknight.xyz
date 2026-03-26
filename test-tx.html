@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TN12 Transaction Test</title>
+  <style>
+    body { background: #000; color: #33ff33; font-family: monospace; padding: 2rem; font-size: 13px; }
+    #log { white-space: pre-wrap; }
+    .err { color: #ff4444; }
+    .ok { color: #44ffff; }
+    .gold { color: #d4a847; }
+    button { background: #1a1a2e; color: #33ff33; border: 1px solid #33ff33; padding: 0.5rem 1rem; font-family: monospace; cursor: pointer; margin: 0.3rem; }
+    button:hover { background: #33ff33; color: #000; }
+    input { background: #0a0a14; color: #33ff33; border: 1px solid #33ff33; padding: 0.4rem; font-family: monospace; width: 500px; }
+  </style>
+</head>
+<body>
+  <h2>TN12 Browser Transaction Test</h2>
+  <div>
+    <button onclick="generateKeypair()">1. Generate Keypair</button>
+    <button onclick="requestFaucet()">2. Request 1 KAS from Faucet</button>
+    <button onclick="checkBalance()">3. Check Balance</button>
+    <button onclick="buildScriptTx()">4. Build Script Tx</button>
+  </div>
+  <br>
+  <div id="log"></div>
+
+  <script type="module">
+    // Make functions available globally
+    let kaspa, rpc, keypair, address, privateKey;
+
+    const logEl = document.getElementById('log');
+    function log(msg, cls) {
+      const span = document.createElement('span');
+      span.className = cls || '';
+      span.textContent = msg + '\n';
+      logEl.appendChild(span);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // Load WASM
+    log('Loading @kasdk/web...');
+    try {
+      kaspa = await import('./node_modules/@kasdk/web/kaspa.js');
+      await kaspa.default('./node_modules/@kasdk/web/kaspa_bg.wasm');
+      log('WASM loaded OK', 'ok');
+      log(`Available classes: ${Object.keys(kaspa).filter(k => typeof kaspa[k] === 'function').slice(0, 20).join(', ')}...`, 'gold');
+    } catch(e) {
+      log(`WASM load failed: ${e.message}`, 'err');
+    }
+
+    window.generateKeypair = function() {
+      try {
+        const { PrivateKey } = kaspa;
+
+        // Check localStorage first
+        const saved = localStorage.getItem('dagknight_faucet_key');
+        let hexKey;
+        if (saved) {
+          hexKey = saved;
+          log('\n--- Loaded Keypair from localStorage ---', 'gold');
+        } else {
+          const bytes = crypto.getRandomValues(new Uint8Array(32));
+          hexKey = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+          localStorage.setItem('dagknight_faucet_key', hexKey);
+          log('\n--- NEW Keypair Generated (saved to localStorage) ---', 'gold');
+        }
+
+        privateKey = new PrivateKey(hexKey);
+        const pubkey = privateKey.toPublicKey();
+        address = pubkey.toAddress('testnet-12');
+
+        log(`Private Key: ${hexKey}`, 'err');
+        log(`             ^^^ SAVE THIS — needed to spend funds ^^^`, 'err');
+        log(`Public Key:  ${pubkey.toString()}`, 'ok');
+        log(`Address:     ${address.toString()}`, 'ok');
+        log(`\nKey persisted in localStorage (survives refresh).`, 'gold');
+        log(`Fund this address with test KAS to continue.`, 'gold');
+      } catch(e) {
+        log(`Keypair error: ${e.message}`, 'err');
+        log(e.stack, 'err');
+      }
+    };
+
+    const FAUCET_URL = 'https://us-central1-gen-lang-client-0088192818.cloudfunctions.net/dagknight-faucet';
+
+    window.requestFaucet = async function() {
+      if (!address) { log('Generate keypair first!', 'err'); return; }
+      try {
+        const addr = address.toString();
+        log(`\n--- Requesting 1 KAS from Faucet ---`, 'gold');
+        log(`Address: ${addr}`, 'ok');
+        log(`Calling ${FAUCET_URL}...`);
+
+        const resp = await fetch(FAUCET_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: addr }),
+        });
+
+        const data = await resp.json();
+
+        if (resp.ok) {
+          log(`Funded! TX: ${data.txId}`, 'ok');
+          log(`Amount: ${data.amount} sompi (1 KAS)`, 'ok');
+          log(`From faucet: ${data.faucet}`, 'ok');
+          log(`\nClick "Check Balance" to verify.`, 'gold');
+        } else {
+          log(`Faucet error: ${data.error}`, 'err');
+        }
+      } catch(e) {
+        log(`Faucet request failed: ${e.message}`, 'err');
+      }
+    };
+
+    window.checkBalance = async function() {
+      if (!address) { log('Generate keypair first!', 'err'); return; }
+      try {
+        log('\n--- Checking Balance ---', 'gold');
+        const addr = address.toString();
+
+        // Use REST API
+        const resp = await fetch(`https://api-tn12.kaspa.org/addresses/${addr}/balance`);
+        const bal = await resp.json();
+        log(`Address: ${addr}`, 'ok');
+        log(`Balance: ${JSON.stringify(bal)}`, 'ok');
+
+        // Check UTXOs
+        const utxoResp = await fetch(`https://api-tn12.kaspa.org/addresses/${addr}/utxos`);
+        const utxos = await utxoResp.json();
+        log(`UTXOs: ${utxos.length || 0}`, 'ok');
+        if (utxos.length > 0) {
+          utxos.forEach((u, i) => {
+            log(`  UTXO ${i}: ${u.outpoint?.transactionId?.substring(0,16)}... amount:${u.utxoEntry?.amount}`, 'ok');
+          });
+        }
+      } catch(e) {
+        log(`Balance check error: ${e.message}`, 'err');
+      }
+    };
+
+    window.buildScriptTx = function() {
+      try {
+        const { ScriptBuilder, Transaction, TransactionInput, TransactionOutput, TransactionOutpoint, ScriptPublicKey } = kaspa;
+
+        log('\n--- Building Script Transaction ---', 'gold');
+
+        // Build a simple P2SH-like script using ScriptBuilder
+        // This demonstrates we can construct custom scripts in browser
+        const script = new ScriptBuilder()
+          .addOp(0x51)  // OP_1 (OP_TRUE) — anyone can spend (for testing)
+          .toString();
+
+        log(`Script hex: ${script}`, 'ok');
+
+        // Create a ScriptPublicKey from the script
+        const spk = new ScriptPublicKey(0, script);
+        log(`ScriptPublicKey created: version=${spk.version}`, 'ok');
+
+        // Build a transaction output with our custom script
+        const output = new TransactionOutput(1000n, spk);
+        log(`TransactionOutput created: value=${output.value}`, 'ok');
+
+        // Build a transaction (without valid inputs — just proving construction works)
+        const tx = new Transaction({
+          version: 0,
+          inputs: [],
+          outputs: [output],
+          lockTime: 0n,
+          subnetworkId: '0000000000000000000000000000000000000000',
+          gas: 0n,
+          payload: '',
+        });
+        log(`Transaction object created: ${tx.outputs.length} output(s)`, 'ok');
+
+        log('\n--- Result ---', 'gold');
+        log('ScriptBuilder:      WORKS in browser', 'ok');
+        log('ScriptPublicKey:    WORKS in browser', 'ok');
+        log('TransactionOutput:  WORKS in browser', 'ok');
+        log('Transaction:        WORKS in browser', 'ok');
+        log('\nBrowser can construct custom script transactions!', 'gold');
+        log('For covenant txs, we would compile SilverScript → script hex,', 'gold');
+        log('then use ScriptBuilder.fromScript() to wrap it.', 'gold');
+
+      } catch(e) {
+        log(`Script build error: ${e.message}`, 'err');
+        log(e.stack, 'err');
+      }
+    };
+  </script>
+</body>
+</html>

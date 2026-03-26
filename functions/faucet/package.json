@@ -7,7 +7,7 @@
     "@google-cloud/functions-framework": "^3.0.0",
     "@google-cloud/secret-manager": "^5.0.0",
     "@google-cloud/firestore": "^7.0.0",
-    "kaspa-wasm": "^0.13.0"
+    "@kasdk/nodejs": "^0.15.2"
   },
   "engines": {
     "node": ">=20"
