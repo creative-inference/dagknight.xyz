@@ -3,6 +3,11 @@
    Each screen function calls engine methods to render.
    ============================================================ */
 
+// Safe chain emit — no-op if Chain isn't loaded yet
+function chainEmit(action, detail) {
+  if (typeof Chain !== 'undefined') Chain.emitCovenantTx(action, detail);
+}
+
 // ----- Title Screen -----
 async function screenTitle() {
   E.clear();
@@ -91,10 +96,12 @@ async function screenNewGame() {
       E.cyan(`  1 KAS deposited to your wallet on TN12.`);
       E.dim(`  TX: ${result.txId.substring(0, 24)}...`);
     }
-    Chain.emitCovenantTx('Player::create', `New Player UTXO — ${window._state.name} the ${CLASSES[classKey].name}`);
   } catch (err) {
     E.dim(`  Wallet funding skipped: ${err.message}`);
-    Chain.emitCovenantTx('Player::create (sim)', `${window._state.name} — offline mode`);
+  }
+
+  if (typeof Chain !== 'undefined') {
+    chainEmit('Player::create', `New Player UTXO — ${window._state.name} the ${CLASSES[classKey].name}`);
   }
 
   if (Wallet.address) {
@@ -175,7 +182,7 @@ async function screenForest() {
   E.blank();
   E.dim(`  Fights remaining today: ${s.forestFightsMax - s.forestFightsToday}`);
 
-  Chain.emitCovenantTx('Game::encounter', `Episodic Game UTXO created — ${monster.name} spawned`);
+  chainEmit('Game::encounter', `Episodic Game UTXO created — ${monster.name} spawned`);
 
   const choice = await E.menu([
     { key: 'F', label: 'Fight!' },
@@ -260,7 +267,7 @@ async function screenCombat(monster) {
       );
       monster.hp = result.defenderHp;
       log.push({ fn: E.gold.bind(E), text: `  You strike the ${monster.name} for ${result.damage} damage!` });
-      Chain.emitCovenantTx('Game::combat', `Player → ${monster.name} | -${result.damage} HP | ZK proof validated`);
+      chainEmit('Game::combat', `Player → ${monster.name} | -${result.damage} HP | ZK proof validated`);
     }
 
     // Monster attacks back if alive
@@ -282,14 +289,14 @@ async function screenCombat(monster) {
     s.gold += monster.gold;
     E.gold(`  ★ Victory! The ${monster.name} is defeated!`);
     E.line(`  +${monster.xp} XP  +${monster.gold} gold`);
-    Chain.emitCovenantTx('Player::state_update', `+${monster.xp} XP, +${monster.gold} gold → Player UTXO recreated`);
+    chainEmit('Player::state_update', `+${monster.xp} XP, +${monster.gold} gold → Player UTXO recreated`);
 
     const leveled = GameState.checkLevelUp(s);
     if (leveled) {
       E.blank();
       E.ascii(LEVELUP_ART);
       E.gold(`  ★ LEVEL UP! You are now level ${s.level}!`);
-      Chain.emitCovenantTx('Player::level_up', `Level ${s.level} — ${titleForLevel(s.level)} | Stats recalculated via ZK proof`);
+      chainEmit('Player::level_up', `Level ${s.level} — ${titleForLevel(s.level)} | Stats recalculated via ZK proof`);
       E.gold(`  ★ Title: ${titleForLevel(s.level)}`);
       E.line(`  HP: ${s.maxHp}  ATK: ${s.attack}  DEF: ${s.defense}`);
       if (s.level >= 12) {
@@ -386,7 +393,7 @@ async function screenShop() {
       s.gold -= POTION_PRICE;
       s.potions++;
       E.cyan(`  Purchased! You now have ${s.potions} potions. Gold: ${s.gold}`);
-      Chain.emitCovenantTx('ICC: Player+Shop', `Atomic tx — ${POTION_PRICE}g → Shop, potion → Player`);
+      chainEmit('ICC: Player+Shop', `Atomic tx — ${POTION_PRICE}g → Shop, potion → Player`);
       GameState.save(s);
     } else {
       E.red('  Not enough gold!');
@@ -419,7 +426,7 @@ async function screenShop() {
       if (choice === 'W') s.weapon = { ...selected.item };
       else s.armor = { ...selected.item };
       E.gold(`  Equipped ${selected.item.name}!`);
-      Chain.emitCovenantTx('ICC: Player+Shop', `Atomic tx — ${selected.item.price}g → Shop, ${selected.item.name} → Player`);
+      chainEmit('ICC: Player+Shop', `Atomic tx — ${selected.item.price}g → Shop, ${selected.item.name} → Player`);
       GameState.save(s);
     } else {
       E.red('  Not enough gold!');
@@ -461,7 +468,7 @@ async function screenInn() {
       s.hp = s.maxHp;
       GameState.save(s);
       E.cyan(`  You rest deeply. HP fully restored to ${s.maxHp}.`);
-      Chain.emitCovenantTx('Player::inn_rest', `1:1 transition — HP ${s.maxHp}/${s.maxHp}, -${cost}g`);
+      chainEmit('Player::inn_rest', `1:1 transition — HP ${s.maxHp}/${s.maxHp}, -${cost}g`);
     } else {
       E.red('  Not enough gold! The barkeep frowns.');
     }
@@ -556,7 +563,7 @@ async function screenPvP() {
       );
       opp.hp = r1.defenderHp;
       pvpLog.push({ fn: E.gold.bind(E), text: `  You strike ${opp.name} for ${r1.damage}!` });
-      Chain.emitCovenantTx('Arena::combat', `Player → ${opp.name} | -${r1.damage} HP`);
+      chainEmit('Arena::combat', `Player → ${opp.name} | -${r1.damage} HP`);
     }
 
     if (opp.hp > 0) {
@@ -583,7 +590,7 @@ async function screenPvP() {
     GameState.checkLevelUp(s);
     GameState.save(s);
     E.gold(`  ★ ${opp.name} falls! +${reward} gold, +${opp.level * 30} XP`);
-    Chain.emitCovenantTx('ICC: Arena+Player+Player', `PvP resolved — ${s.name} wins, +${reward}g stake released`);
+    chainEmit('ICC: Arena+Player+Player', `PvP resolved — ${s.name} wins, +${reward}g stake released`);
     await E.pause();
     await screenTown();
   }

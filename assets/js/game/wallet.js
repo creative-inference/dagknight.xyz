@@ -4,7 +4,7 @@
 
 const WALLET_KEY = 'dagknight_wallet';
 const FAUCET_URL = 'https://us-central1-gen-lang-client-0088192818.cloudfunctions.net/dagknight-faucet';
-const TN12_API = 'https://api-tn12.kaspa.org';
+const WALLET_TN12_API = 'https://api-tn12.kaspa.org';
 
 const Wallet = {
   _privateKeyHex: null,
@@ -40,8 +40,9 @@ const Wallet = {
 
     // Lazy-load WASM SDK
     if (!this._kaspa) {
-      const wasmBase = document.querySelector('meta[name="kasdk-wasm"]')?.content
-        || '/node_modules/@kasdk/web/';
+      const metaBase = document.querySelector('meta[name="kasdk-wasm"]')?.content || '/node_modules/@kasdk/web/';
+      // Resolve relative to page origin
+      const wasmBase = new URL(metaBase, window.location.href).href;
       const mod = await import(wasmBase + 'kaspa.js');
       await mod.default(wasmBase + 'kaspa_bg.wasm');
       this._kaspa = mod;
@@ -95,7 +96,7 @@ const Wallet = {
   async getBalance() {
     if (!this._address) return 0;
     try {
-      const resp = await fetch(`${TN12_API}/addresses/${this._address}/balance`);
+      const resp = await fetch(`${WALLET_TN12_API}/addresses/${this._address}/balance`);
       const data = await resp.json();
       return parseInt(data.balance || '0', 10);
     } catch {
