@@ -97,7 +97,7 @@ const Covenant = {
     const newP2shSpk = newScriptBuilder.createPayToScriptHashScript();
 
     const covenantValue = BigInt(covenantUtxo.utxoEntry.amount);
-    const fee = 10000n;
+    const fee = 10000n + BigInt(Math.floor(Math.random() * 1000)); // jitter to avoid tx hash collisions
     const outValue = covenantValue - fee;
 
     // The P2SH scriptPublicKey of the current covenant
@@ -114,6 +114,10 @@ const Covenant = {
       index: covenantUtxo.outpoint.index,
     };
 
+    // For P2SH signing, the UTXO scriptPublicKey must be the REDEEM script
+    // (not the P2SH wrapper) so the signing hash is computed correctly
+    const redeemSpk = new kaspa.ScriptPublicKey(0, currentScript);
+
     const inputs = [{
       previousOutpoint: outpoint,
       signatureScript: '',
@@ -122,7 +126,7 @@ const Covenant = {
       utxo: {
         outpoint,
         amount: covenantValue,
-        scriptPublicKey: currentP2shSpk,
+        scriptPublicKey: redeemSpk,  // redeem script for signing hash
         blockDaaScore: BigInt(covenantUtxo.utxoEntry.blockDaaScore || 0),
         isCoinbase: false,
       },
@@ -136,42 +140,52 @@ const Covenant = {
       gas: 0n, payload: '',
     });
 
-    // For P2SH spending, we need to construct the signatureScript manually:
-    // <function_args...> <signature> <redeem_script>
-    // The function selector for "update" is pushed first (OP_0 = first function)
+    // Create signature using the redeem script for the signing hash
+    const sig = kaspa.createInputSignature(tx, 0, privateKey);
+
+    // Kaspa P2SH sig_script is NOT a sequence of push opcodes.
+    // payToScriptHashSignatureScript does raw concatenation: sig + redeemScript.
     //
-    // Stack at spend time (pushed in reverse):
-    //   <redeemScript> <ownerSig> <newLevel> <newGold> <newHp> <functionSelector>
+    // For covenant entrypoints with function args, we need to encode the args
+    // into a "virtual" sig_script that the SilverScript runtime unpacks.
     //
-    // For now, we sign the tx first to get the signature, then build the full sig_script
-
-    // Sign to get the signature
-    const signedTx = kaspa.signTransaction(tx, [privateKey], false);
-
-    // Extract the signature from the signed input
-    const signedSigScript = signedTx.inputs[0].signatureScript;
-
-    // Build the P2SH sig_script:
-    // <args> <sig> <serialized_redeem_script>
-    // For the update function: newHp newGold newLevel are on stack
-    // But the compiler handles this internally — we need to understand the exact stack layout
+    // From the SilverScript compiler: the sig_script for a multi-entrypoint
+    // contract should be built using the compiler's build_sig_script method.
+    // Since we can't call that from JS, we use payToScriptHashSignatureScript
+    // which handles the basic format, and encode args as a ScriptBuilder
+    // prefix that gets pushed before the sig.
     //
-    // TODO: This is the hard part — constructing the correct sig_script
-    // that satisfies the covenant's update entrypoint.
-    // For now, submit the signed tx as-is to see what error we get.
+    // Actually: Kaspa P2SH sig_scripts ARE push-only scripts.
+    // The "disabled opcode" error means OP_PUSHDATA1 (0x4c) is disabled.
+    // We need to split the redeem script into chunks <= 75 bytes
+    // and push each chunk, or find the right encoding.
+    //
+    // Simplest test: try the withdraw function (no args, just sig)
+    // to verify basic P2SH spending works first.
 
-    return await this._submitTx(signedTx);
+    // Use withdraw function (selector = 1) — no args needed, just sig
+    const sigScript = kaspa.payToScriptHashSignatureScript(currentScript, sig);
+    tx.inputs[0].signatureScript = sigScript;
+
+    return await this._submitTx(tx);
   },
 
-  // Find the covenant UTXO for a player address
-  async findCovenantUtxo(address, pubkeyHex, level) {
-    const utxos = await this.getUtxos(address);
-    // The covenant UTXO has a P2SH scriptPublicKey, not a regular P2PK
-    // Regular UTXOs start with "20" (OP_PUSHBYTES_32), P2SH starts with "aa" (OP_BLAKE2B)
-    return utxos.find(u => {
-      const spk = u.utxoEntry?.scriptPublicKey?.scriptPublicKey || '';
-      return spk.startsWith('aa');
-    });
+  // Derive the P2SH address for a covenant script
+  getCovenantAddress(kaspa, pubkeyHex, level) {
+    const script = this.buildPlayerScript(pubkeyHex, level);
+    const scriptBuilder = kaspa.ScriptBuilder.fromScript(script);
+    const p2shSpk = scriptBuilder.createPayToScriptHashScript();
+    // Convert P2SH scriptPublicKey to an address
+    const addr = kaspa.addressFromScriptPublicKey(p2shSpk, 'testnet-12');
+    return addr?.toString();
+  },
+
+  // Find the covenant UTXO by querying the P2SH address
+  async findCovenantUtxo(kaspa, pubkeyHex, level) {
+    const covenantAddr = this.getCovenantAddress(kaspa, pubkeyHex, level);
+    if (!covenantAddr) return null;
+    const utxos = await this.getUtxos(covenantAddr);
+    return utxos && utxos.length > 0 ? utxos[0] : null;
   },
 
   async getUtxos(address) {
@@ -210,12 +224,44 @@ const Covenant = {
 
     if (!resp.ok) {
       const err = await resp.text();
+      console.error('TX REJECTED:', err);
+      console.error('Submitted:', JSON.stringify(apiTx, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2));
       throw new Error(`tx ${resp.status}: ${err.substring(0, 200)}`);
     }
 
     const result = await resp.json();
     return result.transactionId || signedTx.finalize().toString();
   },
+};
+
+// Debug: test covenant spend from console
+// Usage: testCovenantSpend()
+window.testCovenantSpend = async function() {
+  console.log('=== Testing Covenant Spend ===');
+  await Wallet.ensureAddress();
+  if (!Wallet._kaspa) { console.error('WASM not loaded'); return; }
+
+  const kaspa = Wallet._kaspa;
+  const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+  const pubkeyHex = pk.toPublicKey().toString();
+
+  // Find covenant at level 1 (or whatever it was created at)
+  for (let lvl = 1; lvl <= 12; lvl++) {
+    const utxo = await Covenant.findCovenantUtxo(kaspa, pubkeyHex, lvl);
+    if (utxo) {
+      console.log(`Found covenant UTXO at level ${lvl}:`, utxo);
+      console.log('Attempting spend: level', lvl, '→', lvl + 1);
+      try {
+        const txId = await Covenant.spendPlayerUtxo(kaspa, pk, pubkeyHex, lvl, lvl + 1, utxo);
+        console.log('SUCCESS! TX:', txId);
+        return txId;
+      } catch (e) {
+        console.error('Spend failed:', e.message);
+        return;
+      }
+    }
+  }
+  console.error('No covenant UTXO found at any level');
 };
 
 function hexToBytes(hex) {

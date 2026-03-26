@@ -27,6 +27,8 @@ async function screenTitle() {
   const choice = await E.menu(opts);
   if (choice === 'C') {
     window._state = GameState.load();
+    // Load WASM for covenant operations
+    Wallet.ensureAddress().catch(() => {});
     await screenTown();
   } else if (choice === 'N') {
     await screenNewGame();
@@ -328,10 +330,16 @@ async function screenCombat(monster) {
         try {
           const pk = new Wallet._kaspa.PrivateKey(Wallet._privateKeyHex);
           const pubkeyHex = pk.toPublicKey().toString();
-          const covUtxo = await Covenant.findCovenantUtxo(Wallet.address, pubkeyHex, s.level - 1);
+          // Search for covenant at any previous level (may not have been updated on-chain)
+          let covUtxo = null;
+          let onChainLevel = s.level - 1;
+          for (let lvl = s.level - 1; lvl >= 1; lvl--) {
+            covUtxo = await Covenant.findCovenantUtxo(Wallet._kaspa, pubkeyHex, lvl);
+            if (covUtxo) { onChainLevel = lvl; break; }
+          }
           if (covUtxo) {
             const txId = await Covenant.spendPlayerUtxo(
-              Wallet._kaspa, pk, pubkeyHex, s.level - 1, s.level, covUtxo
+              Wallet._kaspa, pk, pubkeyHex, onChainLevel, s.level, covUtxo
             );
             E.dim(`  Covenant updated on TN12: ${txId.substring(0, 20)}...`);
             chainEmit('Player::spend', `Covenant UTXO spent — level ${s.level - 1} → ${s.level}`);

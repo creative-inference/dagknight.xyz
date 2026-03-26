@@ -35,22 +35,22 @@ const Wallet = {
 
   // Load @kasdk/web WASM and derive address (lazy, one-time)
   async ensureAddress() {
-    if (this._address) return this._address;
     if (!this._privateKeyHex) this._generate();
 
-    // Lazy-load WASM SDK
+    // Always load WASM if not loaded (needed for covenant ops)
     if (!this._kaspa) {
       const metaBase = document.querySelector('meta[name="kasdk-wasm"]')?.content || '/node_modules/@kasdk/web/';
-      // Resolve relative to page origin
       const wasmBase = new URL(metaBase, window.location.href).href;
       const mod = await import(wasmBase + 'kaspa.js');
       await mod.default(wasmBase + 'kaspa_bg.wasm');
       this._kaspa = mod;
     }
 
-    const pk = new this._kaspa.PrivateKey(this._privateKeyHex);
-    this._address = pk.toAddress('testnet-12').toString();
-    this._save();
+    if (!this._address) {
+      const pk = new this._kaspa.PrivateKey(this._privateKeyHex);
+      this._address = pk.toAddress('testnet-12').toString();
+      this._save();
+    }
     return this._address;
   },
 
