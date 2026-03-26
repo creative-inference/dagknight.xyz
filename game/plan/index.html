@@ -98,12 +98,12 @@ GitHub Pages (static)          TN12 Node
         <div class="tech-row">
           <span class="tech-game">SilverScript</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Compile to script hex (compiler needed)</span>
+          <span class="tech-chain"><code>player.sil</code> compiled to 172-byte P2SH script via <code>silverc</code> &mdash; PROVEN</span>
         </div>
         <div class="tech-row">
           <span class="tech-game">ScriptBuilder</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain"><code>ScriptBuilder.fromScript(hex)</code> in browser &mdash; PROVEN</span>
+          <span class="tech-chain"><code>ScriptBuilder.fromScript(hex)</code> + <code>createPayToScriptHashScript()</code> &mdash; PROVEN</span>
         </div>
         <div class="tech-row">
           <span class="tech-game">Transaction</span>
@@ -124,23 +124,28 @@ GitHub Pages (static)          TN12 Node
     </div>
 
     <!-- Phase 2 -->
-    <h2 class="section-title" style="margin-top: 2.5rem;">Phase 2: <span class="gold">On-Chain Game State</span></h2>
+    <h2 class="section-title" style="margin-top: 2.5rem;">Phase 2: <span class="gold">On-Chain Game State</span> <span class="teal">(In Progress)</span></h2>
     <p style="color: var(--text); margin-bottom: 1.5rem;">
-      Game state moves from localStorage to covenant UTXOs. The browser builds and submits real transactions.
+      Game state is moving from localStorage to covenant UTXOs. The browser builds and submits real transactions.
     </p>
 
     <div class="game-tech-note" style="margin-bottom: 2rem;">
-      <h3>What Remains for Phase 2</h3>
+      <h3>Phase 2 Progress</h3>
       <div class="tech-grid">
         <div class="tech-row">
-          <span class="tech-game">Compiler</span>
+          <span class="tech-game" style="color: var(--primary);">&#x2705; Compiler</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Compile <code>player.ss</code> to script hex with SilverScript compiler</span>
+          <span class="tech-chain"><code>player.sil</code> compiled to 172-byte bytecode with SilverScript compiler</span>
         </div>
         <div class="tech-row">
-          <span class="tech-game">Fund Players</span>
+          <span class="tech-game" style="color: var(--primary);">&#x2705; Fund Players</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Send 1 test KAS from faucet wallet to new players on character creation</span>
+          <span class="tech-chain">Cloud Function faucet sends 1 KAS to new players automatically</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game" style="color: var(--primary);">&#x2705; Create Covenant</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Player covenant UTXO created on TN12 via P2SH from browser &mdash; confirmed on-chain</span>
         </div>
         <div class="tech-row">
           <span class="tech-game">State Read</span>
@@ -236,16 +241,18 @@ GitHub Pages (static)          TN12 Node
     <ul style="color: var(--text-dim); font-size: 0.9rem; list-style: none; padding: 0; line-height: 2.2; margin-bottom: 2rem;">
       <li style="color: var(--primary);">&#x2705; Browser tx construction &mdash; <code>@kasdk/web</code> v0.15.2, ScriptBuilder + Transaction confirmed working</li>
       <li style="color: var(--primary);">&#x2705; TN12 connectivity &mdash; REST API at <code>api-tn12.kaspa.org</code> is public, includes tx submission</li>
-      <li style="color: var(--primary);">&#x2705; Test KAS &mdash; 10,000 KAS obtained from TN12 faucet</li>
-      <li style="color: var(--primary);">&#x2705; No backend needed &mdash; static frontend + REST API is the complete stack</li>
+      <li style="color: var(--primary);">&#x2705; Test KAS &mdash; 10,000 KAS from TN12 faucet, auto-dispensed via Cloud Function</li>
+      <li style="color: var(--primary);">&#x2705; No backend needed &mdash; static frontend + REST API + one faucet function</li>
+      <li style="color: var(--primary);">&#x2705; SilverScript compiler &mdash; <code>player.sil</code> compiled to 172-byte P2SH bytecode via <code>silverc</code></li>
+      <li style="color: var(--primary);">&#x2705; Covenant UTXO creation &mdash; Player covenant deployed to TN12 from browser, confirmed on-chain</li>
+      <li style="color: var(--primary);">&#x2705; Player onboarding &mdash; faucet Cloud Function auto-funds new players with 1 KAS</li>
     </ul>
 
     <h2 class="section-title">Open <span class="gold">Questions</span></h2>
     <ul style="color: var(--text-dim); font-size: 0.9rem; list-style: none; padding: 0; line-height: 2.2; margin-bottom: 2rem;">
-      <li>&#x2753; SilverScript compiler &mdash; can we compile in browser (WASM) or pre-compile and embed the script hex?</li>
+      <li>&#x2753; Covenant spend &mdash; can we spend the Player UTXO with updated state from browser?</li>
       <li>&#x2753; SilverScript stability &mdash; compiler API may change before mainnet (May 5, 2026)</li>
       <li>&#x2753; Verifiable randomness &mdash; block hash as monster seed fair enough for demo?</li>
-      <li>&#x2753; Player onboarding &mdash; auto-send 1 test KAS to new players from faucet wallet?</li>
       <li>&#x2753; Browser wallet extensions &mdash; will KasWare add covenant tx support?</li>
     </ul>
 
