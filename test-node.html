@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TN12 Node Direct Test</title>
+  <style>
+    body { background: #000; color: #33ff33; font-family: monospace; padding: 2rem; font-size: 13px; }
+    #log { white-space: pre-wrap; }
+    .err { color: #ff4444; }
+    .ok { color: #44ffff; }
+    .gold { color: #d4a847; }
+    button { background: #1a1a2e; color: #33ff33; border: 1px solid #33ff33; padding: 0.5rem 1rem; font-family: monospace; cursor: pointer; margin: 0.3rem; }
+    button:hover { background: #33ff33; color: #000; }
+  </style>
+</head>
+<body>
+  <h2>Direct TN12 Node — Covenant Deployment Test</h2>
+  <p style="color: #888;">Connects via wRPC to your TN12 node at ws://157.245.8.28:18310</p>
+  <div>
+    <button onclick="connectNode()">1. Connect to Node</button>
+    <button onclick="getInfo()">2. Get BlockDAG Info</button>
+    <button onclick="createCovenant()">3. Deploy Covenant</button>
+    <button onclick="withdrawCovenant()">4. Withdraw Covenant</button>
+  </div>
+  <br>
+  <div id="log"></div>
+
+  <script type="module">
+    const logEl = document.getElementById('log');
+    function log(msg, cls) {
+      const span = document.createElement('span');
+      span.className = cls || '';
+      span.textContent = msg + '\n';
+      logEl.appendChild(span);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    let kaspa; window.rpc = null; let rpc;
+    const NODE_URL = 'ws://157.245.8.28:18310';
+
+    // Load WASM
+    log('Loading @kasdk/web...');
+    kaspa = await import('./node_modules/@kasdk/web/kaspa.js');
+    await kaspa.default('./node_modules/@kasdk/web/kaspa_bg.wasm');
+    log('WASM loaded', 'ok');
+
+    // Load wallet
+    const WALLET_KEY = 'dagknight_wallet';
+    let saved = localStorage.getItem(WALLET_KEY);
+    let keyHex, address;
+    if (saved) {
+      const data = JSON.parse(saved);
+      keyHex = data.key;
+      address = data.address;
+      log(`Wallet loaded: ${address}`, 'ok');
+    } else {
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      keyHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      const pk = new kaspa.PrivateKey(keyHex);
+      address = pk.toAddress('testnet-12').toString();
+      localStorage.setItem(WALLET_KEY, JSON.stringify({ key: keyHex, address, funded: false }));
+      log(`New wallet: ${address}`, 'gold');
+    }
+
+    // Covenant script
+    const PLAYER_SCRIPT_HEX = '6b0814000000000000000800000000000000000801000000000000006c76009c6375567920aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac69557900a269547900a26953795179a269b9cb519c69557958cd587c7e557958cd587c7e557958cd587c7e7e7eb976c902e10094765193bc7c7eb976c97602e10094011c937cbc7eaa02000001aa7e01207e7c7e01877eb900ccc3876975757575757575516776519c6375537920aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac697575757551677500696868';
+
+    function buildScript(pubkeyHex) {
+      return PLAYER_SCRIPT_HEX.replaceAll('aa'.repeat(32), pubkeyHex);
+    }
+
+    window.connectNode = async function() {
+      log(`\nConnecting to ${NODE_URL}...`, 'gold');
+      try {
+        rpc = new kaspa.RpcClient({ url: NODE_URL, encoding: kaspa.Encoding.SerdeJson });
+        window.rpc = rpc;
+        await rpc.connect();
+        log(`Connected to ${rpc.url}`, 'ok');
+      } catch(e) {
+        log(`Connect failed: ${e.message}`, 'err');
+      }
+    };
+
+    window.getInfo = async function() {
+      if (!rpc) { log('Connect first!', 'err'); return; }
+      try {
+        const info = await rpc.getBlockDagInfo();
+        log(`\nNetwork: ${info.networkName}`, 'ok');
+        log(`DAA: ${info.virtualDaaScore}`, 'ok');
+        log(`Blocks: ${info.blockCount}`, 'ok');
+      } catch(e) {
+        log(`Info failed: ${e.message}`, 'err');
+      }
+    };
+
+    window.createCovenant = async function() {
+      if (!rpc) { log('Connect first!', 'err'); return; }
+      log('\n=== Creating Covenant via wRPC ===', 'gold');
+
+      const pk = new kaspa.PrivateKey(keyHex);
+      const pubHex = pk.toPublicKey().toXOnlyPublicKey().toString();
+      const playerSpk = kaspa.payToAddressScript(pk.toAddress('testnet-12'));
+
+      // Get UTXOs via REST API (node UTXO index may lag)
+      log('Fetching UTXOs via REST...');
+      const restUtxos = await fetch(`https://api-tn12.kaspa.org/addresses/${address}/utxos`).then(r => r.json());
+      log(`UTXOs: ${restUtxos.length}`, 'ok');
+
+      if (restUtxos.length === 0) {
+        log('No UTXOs! Fund this address first: ' + address, 'err');
+        return;
+      }
+
+      let totalInput = 0n;
+      const inputs = restUtxos.map(u => {
+        const amt = BigInt(u.utxoEntry.amount);
+        totalInput += amt;
+        const outpoint = { transactionId: u.outpoint.transactionId, index: u.outpoint.index };
+        return {
+          previousOutpoint: outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+          utxo: {
+            outpoint, amount: amt, scriptPublicKey: playerSpk,
+            blockDaaScore: BigInt(u.utxoEntry.blockDaaScore), isCoinbase: u.utxoEntry.isCoinbase || false,
+          },
+        };
+      });
+
+      log(`Total input: ${totalInput}`, 'ok');
+
+      // Build covenant output — P2SH wrapped
+      const script = buildScript(pubHex);
+      const covenantSpk = kaspa.ScriptBuilder.fromScript(script).createPayToScriptHashScript();
+      const covenantValue = 10000000n; // 0.1 KAS
+      const fee = 10000n;
+      const change = totalInput - covenantValue - fee;
+
+      const outputs = [{ value: covenantValue, scriptPublicKey: covenantSpk }];
+      if (change > 0n) outputs.push({ value: change, scriptPublicKey: playerSpk });
+
+      const tx = new kaspa.Transaction({
+        version: 0, inputs, outputs,
+        lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+      });
+
+      const signedTx = kaspa.signTransaction(tx, [pk], false);
+
+      log('Submitting via wRPC (bypasses standardness check)...');
+      try {
+        const result = await rpc.submitTransaction({
+          transaction: signedTx,
+          allowOrphan: false,
+        });
+        log(`COVENANT CREATED! TX: ${result.transactionId}`, 'ok');
+      } catch(e) {
+        log(`Submit failed: ${e.message}`, 'err');
+      }
+    };
+
+    window.withdrawCovenant = async function() {
+      log('\n=== Withdrawing Covenant via wRPC ===', 'gold');
+      if (!rpc) { log('Connect first!', 'err'); return; }
+
+      const pk = new kaspa.PrivateKey(keyHex);
+      const pubHex = pk.toPublicKey().toXOnlyPublicKey().toString();
+      const script = buildScript(pubHex);
+      const covenantSpk = kaspa.ScriptBuilder.fromScript(script).createPayToScriptHashScript();
+      const covenantAddr = kaspa.addressFromScriptPublicKey(covenantSpk, 'testnet-12');
+      log(`Covenant address: ${covenantAddr}`, 'gold');
+
+      // Find covenant UTXO via REST API (node UTXO index may lag)
+      const addrStr = covenantAddr.toString();
+      const restUtxos = await fetch(`https://api-tn12.kaspa.org/addresses/${addrStr}/utxos`).then(r => r.json());
+      log(`Covenant UTXOs (REST): ${restUtxos.length}`);
+      if (!restUtxos.length) { log('No covenant UTXO found!', 'err'); return; }
+
+      const u = restUtxos[0];
+      const amt = BigInt(u.utxoEntry.amount);
+      log(`Found: ${amt} sompi`, 'ok');
+
+      // Build withdraw tx: spend covenant → send to player address
+      const playerSpk = kaspa.payToAddressScript(address);
+
+      const txInput = {
+        previousOutpoint: { transactionId: u.outpoint.transactionId, index: u.outpoint.index },
+        signatureScript: '', sequence: 0n, sigOpCount: 1,
+        utxo: {
+          outpoint: { transactionId: u.outpoint.transactionId, index: u.outpoint.index },
+          amount: amt, scriptPublicKey: covenantSpk,
+          blockDaaScore: BigInt(u.utxoEntry.blockDaaScore), isCoinbase: u.utxoEntry.isCoinbase || false,
+        },
+      };
+
+      // First build unsigned tx for signing (random fee jitter to avoid tx ID cache)
+      const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
+      const unsignedTx = new kaspa.Transaction({
+        version: 0,
+        inputs: [txInput],
+        outputs: [{ value: amt - fee, scriptPublicKey: playerSpk }],
+        lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+      });
+
+      // Sign with P2SH scriptPublicKey (on-chain hash)
+      const sigHex = kaspa.createInputSignature(unsignedTx, 0, pk);
+
+      // Build sig_script: <sig_with_push> <OP_1=withdraw> <PUSHDATA redeem>
+      const redeemLen = script.length / 2;
+      let sigScript = sigHex;                        // already has push opcode
+      sigScript += '51';                             // OP_1 (withdraw selector)
+      if (redeemLen <= 255) {
+        sigScript += '4c';                           // OP_PUSHDATA1
+        sigScript += redeemLen.toString(16).padStart(2, '0');
+      } else {
+        sigScript += '4d';                           // OP_PUSHDATA2
+        sigScript += (redeemLen & 0xff).toString(16).padStart(2, '0');
+        sigScript += ((redeemLen >> 8) & 0xff).toString(16).padStart(2, '0');
+      }
+      sigScript += script;                           // redeem script
+
+      // Rebuild tx with sig_script set
+      const signedInput = {
+        previousOutpoint: { transactionId: u.outpoint.transactionId, index: u.outpoint.index },
+        signatureScript: sigScript, sequence: 0n, sigOpCount: 1,
+      };
+      const signedTx = new kaspa.Transaction({
+        version: 0,
+        inputs: [signedInput],
+        outputs: [{ value: amt - fee, scriptPublicKey: playerSpk }],
+        lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+      });
+
+      const txJson = signedTx.toJSON();
+      console.log('sigScript length:', sigScript.length / 2, 'bytes');
+      console.log('tx input sigScript:', txJson.inputs?.[0]?.signatureScript?.length);
+      const restBody = {
+        transaction: {
+          version: Number(txJson.version),
+          inputs: txJson.inputs.map(i => ({
+            previousOutpoint: i.previousOutpoint,
+            signatureScript: i.signatureScript,
+            sequence: Number(i.sequence),
+            sigOpCount: Number(i.sigOpCount),
+          })),
+          outputs: txJson.outputs.map(o => ({
+            amount: String(o.value),
+            scriptPublicKey: { version: o.scriptPublicKey.version, scriptPublicKey: o.scriptPublicKey.script },
+          })),
+          lockTime: Number(txJson.lockTime),
+          subnetworkId: txJson.subnetworkId,
+          gas: Number(txJson.gas),
+          payload: txJson.payload || '',
+        },
+      };
+
+      log('Submitting withdraw via REST API (for comparison)...');
+      try {
+        const restResp = await fetch('https://api-tn12.kaspa.org/transactions', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(restBody),
+        });
+        const restResult = await restResp.json();
+        if (restResp.ok) {
+          log(`REST WITHDRAWN! TX: ${restResult.transactionId}`, 'ok');
+        } else {
+          log(`REST failed: ${JSON.stringify(restResult)}`, 'err');
+
+          // Also try wRPC
+          log('Trying wRPC...');
+          const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+          log(`wRPC WITHDRAWN! TX: ${result.transactionId}`, 'ok');
+        }
+        log(`${amt} sompi returned to ${address}`, 'ok');
+      } catch(e) {
+        log(`Withdraw failed: ${e.message}`, 'err');
+        console.log('TX:', JSON.stringify(txJson, (k,v) => typeof v === 'bigint' ? v.toString() : v, 2));
+      }
+    };
+  </script>
+</body>
+</html>

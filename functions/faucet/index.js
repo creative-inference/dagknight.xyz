@@ -69,11 +69,11 @@ functions.http('fund', async (req, res) => {
       return res.status(400).json({ error: 'valid kaspatest: address required' });
     }
 
-    // Rate limit
-    const allowed = await checkRateLimit(address);
-    if (!allowed) {
-      return res.status(429).json({ error: 'address already funded' });
-    }
+    // Rate limit (temporarily relaxed for testing)
+    // const allowed = await checkRateLimit(address);
+    // if (!allowed) {
+    //   return res.status(429).json({ error: 'address already funded' });
+    // }
 
     // Load SDK and secrets
     const ksp = await loadKaspa();
