@@ -100,26 +100,28 @@
       const pubHex = pk.toPublicKey().toXOnlyPublicKey().toString();
       const playerSpk = kaspa.payToAddressScript(pk.toAddress('testnet-12'));
 
-      // Get UTXOs via REST API (node UTXO index may lag)
-      log('Fetching UTXOs via REST...');
-      const restUtxos = await fetch(`https://api-tn12.kaspa.org/addresses/${address}/utxos`).then(r => r.json());
-      log(`UTXOs: ${restUtxos.length}`, 'ok');
+      // Get UTXOs via wRPC
+      log('Fetching UTXOs via wRPC...');
+      const utxoResp = await rpc.getUtxosByAddresses({ addresses: [address] });
+      const utxos = utxoResp.entries || utxoResp || [];
+      log(`UTXOs: ${utxos.length}`, 'ok');
 
-      if (restUtxos.length === 0) {
+      if (utxos.length === 0) {
         log('No UTXOs! Fund this address first: ' + address, 'err');
         return;
       }
 
       let totalInput = 0n;
-      const inputs = restUtxos.map(u => {
-        const amt = BigInt(u.utxoEntry.amount);
+      const inputs = utxos.map(u => {
+        const entry = u.entry || u.utxoEntry || u;
+        const amt = BigInt(entry.amount);
         totalInput += amt;
         const outpoint = { transactionId: u.outpoint.transactionId, index: u.outpoint.index };
         return {
           previousOutpoint: outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
           utxo: {
             outpoint, amount: amt, scriptPublicKey: playerSpk,
-            blockDaaScore: BigInt(u.utxoEntry.blockDaaScore), isCoinbase: u.utxoEntry.isCoinbase || false,
+            blockDaaScore: BigInt(entry.blockDaaScore || 0), isCoinbase: entry.isCoinbase || false,
           },
         };
       });
@@ -166,14 +168,16 @@
       const covenantAddr = kaspa.addressFromScriptPublicKey(covenantSpk, 'testnet-12');
       log(`Covenant address: ${covenantAddr}`, 'gold');
 
-      // Find covenant UTXO via REST API (node UTXO index may lag)
+      // Find covenant UTXO via wRPC
       const addrStr = covenantAddr.toString();
-      const restUtxos = await fetch(`https://api-tn12.kaspa.org/addresses/${addrStr}/utxos`).then(r => r.json());
-      log(`Covenant UTXOs (REST): ${restUtxos.length}`);
-      if (!restUtxos.length) { log('No covenant UTXO found!', 'err'); return; }
+      const covUtxoResp = await rpc.getUtxosByAddresses({ addresses: [addrStr] });
+      const covUtxos = covUtxoResp.entries || covUtxoResp || [];
+      log(`Covenant UTXOs: ${covUtxos.length}`);
+      if (!covUtxos.length) { log('No covenant UTXO found!', 'err'); return; }
 
-      const u = restUtxos[0];
-      const amt = BigInt(u.utxoEntry.amount);
+      const u = covUtxos[0];
+      const uEntry = u.entry || u.utxoEntry || u;
+      const amt = BigInt(uEntry.amount);
       log(`Found: ${amt} sompi`, 'ok');
 
       // Build withdraw tx: spend covenant → send to player address
@@ -185,7 +189,7 @@
         utxo: {
           outpoint: { transactionId: u.outpoint.transactionId, index: u.outpoint.index },
           amount: amt, scriptPublicKey: covenantSpk,
-          blockDaaScore: BigInt(u.utxoEntry.blockDaaScore), isCoinbase: u.utxoEntry.isCoinbase || false,
+          blockDaaScore: BigInt(uEntry.blockDaaScore || 0), isCoinbase: uEntry.isCoinbase || false,
         },
       };
 
@@ -230,43 +234,10 @@
       const txJson = signedTx.toJSON();
       console.log('sigScript length:', sigScript.length / 2, 'bytes');
       console.log('tx input sigScript:', txJson.inputs?.[0]?.signatureScript?.length);
-      const restBody = {
-        transaction: {
-          version: Number(txJson.version),
-          inputs: txJson.inputs.map(i => ({
-            previousOutpoint: i.previousOutpoint,
-            signatureScript: i.signatureScript,
-            sequence: Number(i.sequence),
-            sigOpCount: Number(i.sigOpCount),
-          })),
-          outputs: txJson.outputs.map(o => ({
-            amount: String(o.value),
-            scriptPublicKey: { version: o.scriptPublicKey.version, scriptPublicKey: o.scriptPublicKey.script },
-          })),
-          lockTime: Number(txJson.lockTime),
-          subnetworkId: txJson.subnetworkId,
-          gas: Number(txJson.gas),
-          payload: txJson.payload || '',
-        },
-      };
-
-      log('Submitting withdraw via REST API (for comparison)...');
+      log('Submitting withdraw via wRPC...');
       try {
-        const restResp = await fetch('https://api-tn12.kaspa.org/transactions', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(restBody),
-        });
-        const restResult = await restResp.json();
-        if (restResp.ok) {
-          log(`REST WITHDRAWN! TX: ${restResult.transactionId}`, 'ok');
-        } else {
-          log(`REST failed: ${JSON.stringify(restResult)}`, 'err');
-
-          // Also try wRPC
-          log('Trying wRPC...');
-          const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
-          log(`wRPC WITHDRAWN! TX: ${result.transactionId}`, 'ok');
-        }
+        const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+        log(`WITHDRAWN via wRPC! TX: ${result.transactionId}`, 'ok');
         log(`${amt} sompi returned to ${address}`, 'ok');
       } catch(e) {
         log(`Withdraw failed: ${e.message}`, 'err');
