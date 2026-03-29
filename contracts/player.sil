@@ -1,8 +1,6 @@
 pragma silverscript ^0.1.0;
 
-// DAG Gate — Player Covenant (simplified for testing)
-// Single function: update state with owner signature.
-// Uses #[covenant.singleton] declaration for auto state validation.
+// DAG Gate — Player Covenant (no-sig version for testing validateOutputState)
 
 contract Player(
     byte[32] init_owner,
@@ -15,19 +13,17 @@ contract Player(
     int gold = init_gold;
     int level = init_level;
 
-    #[covenant.singleton(mode = transition)]
-    function update(State prev_state, sig owner_sig, pubkey owner_pk, int newHp, int newGold, int newLevel) : (State) {
-        require(blake2b(owner_pk) == prev_state.owner);
-        require(checkSig(owner_sig, owner_pk));
+    entrypoint function update(int newHp, int newGold, int newLevel) {
         require(newHp >= 0);
         require(newGold >= 0);
-        require(newLevel >= prev_state.level);
+        require(newLevel >= level);
 
-        return({
-            owner: prev_state.owner,
+        State next = {
+            owner: owner,
             hp: newHp,
             gold: newGold,
             level: newLevel
-        });
+        };
+        validateOutputState(0, next);
     }
 }

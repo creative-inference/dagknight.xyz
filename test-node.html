@@ -63,9 +63,9 @@
     }
 
     // Covenant script
-    // Covenant declaration contract (168 bytes, without_selector=true, single entrypoint __update)
-    // Compiled from player.sil with #[covenant.singleton(mode=transition)]
-    const PLAYER_SCRIPT_HEX = '20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0814000000000000000800000000000000000801000000000000005779aa5479876958795879ac69567900a269557900a269547978a269b9cb519c69537901207c7e577958cd587c7e577958cd587c7e577958cd587c7e7e7e7eb976c97602a80094013c937cbc7eaa02000001aa7e01207e7c7e01877eb900ccc3876975757575757575757551';
+    // No-sig player contract (146 bytes, without_selector=true)
+    // update(newHp, newGold, newLevel) + validateOutputState — no checkSig for testing
+    const PLAYER_SCRIPT_HEX = '20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa081400000000000000080000000000000000080100000000000000567900a269557900a269547978a269537901207c7e577958cd587c7e577958cd587c7e577958cd587c7e7e7e7eb976c97602920094013c937cbc7eaa02000001aa7e01207e7c7e01877e00c387697575757575757551';
 
     function buildScript(pubkeyHex) {
       return PLAYER_SCRIPT_HEX.replaceAll('aa'.repeat(32), pubkeyHex);
@@ -207,21 +207,16 @@
         lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
       });
 
-      const sigHex = kaspa.createInputSignature(unsignedTx, 0, pk);
-
-      // sig_script: <sig> <pubkey> <newHp> <newGold> <newLevel> <redeem>
-      // No selector (without_selector=true)
-      const pubkeyBytes = pk.toPublicKey().toXOnlyPublicKey().toString();
+      // sig_script: <newHp> <newGold> <newLevel> <redeem>
+      // No sig/pubkey (no-sig contract), no selector (without_selector=true)
       const argSb = new kaspa.ScriptBuilder();
-      argSb.addData(new Uint8Array(pubkeyBytes.match(/.{2}/g).map(h => parseInt(h, 16))));
       argSb.addI64(BigInt(newHp));
       argSb.addI64(BigInt(newGold));
       argSb.addI64(BigInt(newLevel));
       const argsHex = argSb.toString();
 
       const redeemLen = currentScript.length / 2;
-      let sigScript = sigHex;    // sig with push opcode
-      sigScript += argsHex;      // pubkey + newHp + newGold + newLevel
+      let sigScript = argsHex;
       if (redeemLen <= 255) {
         sigScript += '4c' + redeemLen.toString(16).padStart(2, '0');
       } else {
