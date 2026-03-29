@@ -185,7 +185,6 @@ async function screenTitle() {
         const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
         const chainState = await Covenant.loadFromChain(kaspa, pub, s);
         if (chainState) {
-          // Chain state found — use it as source of truth
           if (chainState.hp !== s._onChainHp || chainState.gold !== s._onChainGold || chainState.level !== s._onChainLevel) {
             s.hp = chainState.hp;
             s.gold = chainState.gold;
@@ -195,10 +194,8 @@ async function screenTitle() {
             s._onChainLevel = chainState.level;
             s._lastCovenantAddr = chainState.address;
             GameState.save(s);
-            chainEmit('Player::chain_load', `State restored from TN12: hp=${chainState.hp} gold=${chainState.gold} level=${chainState.level}`, false);
-          } else {
-            chainEmit('Player::verified', `Covenant verified on TN12 (${chainState.amount} sompi)`, false);
           }
+          s._pendingChainVerify = chainState;
         }
       }
     } catch { /* silent — game works without chain */ }
@@ -334,7 +331,13 @@ async function screenTown() {
   E.gold(`  ${s.name} the ${titleForLevel(s.level)}`);
   E.line(`  Level ${s.level}  |  HP: ${s.hp}/${s.maxHp}  |  Gold: ${s.gold}`);
   E.line(`  ATK: ${s.attack}+${s.weapon.bonus}  DEF: ${s.defense}+${s.armor.bonus}  |  Fights: ${s.forestFightsMax - s.forestFightsToday} left`);
-  if (s._onChainLevel !== undefined) {
+  if (s._pendingChainVerify) {
+    const cv = s._pendingChainVerify;
+    if (cv.hp !== undefined) {
+      chainEmit('Player::verified', `Covenant loaded from TN12: hp=${cv.hp} gold=${cv.gold} level=${cv.level} (${cv.amount} sompi)`, false);
+    }
+    delete s._pendingChainVerify;
+  } else if (s._onChainLevel !== undefined) {
     chainEmit('Player::state', `hp=${s._onChainHp} gold=${s._onChainGold} level=${s._onChainLevel}`, false);
   }
   E.blank();
