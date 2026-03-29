@@ -36,8 +36,7 @@ const Chain = {
       this._addInfo(`Connected to ${dag.networkName}`);
       this._addInfo(`DAA: ${dag.virtualDaaScore} | Blocks: ${dag.blockCount} | Difficulty: ${Math.floor(dag.difficulty)}`);
 
-      // Poll every 2s for new blocks
-      this._pollInterval = setInterval(() => this._poll(), 2000);
+      // Block polling disabled — log only shows covenant txs
     } catch (e) {
       this._connected = false;
       if (this._statusEl) {
