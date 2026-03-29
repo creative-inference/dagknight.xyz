@@ -8,6 +8,32 @@ function chainEmit(action, detail) {
   if (typeof Chain !== 'undefined') Chain.emitCovenantTx(action, detail);
 }
 
+// Sync game state to on-chain covenant UTXO
+async function syncToChain(s, action) {
+  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
+  const ocHp = s._onChainHp; const ocGold = s._onChainGold; const ocLevel = s._onChainLevel;
+  if (ocHp === undefined) return; // no covenant deployed yet
+  // Skip if nothing changed that the covenant tracks
+  if (s.hp === ocHp && s.gold === ocGold && s.level === ocLevel) return;
+  // Level can only go up in the contract — clamp
+  const newLevel = Math.max(s.level, ocLevel);
+  try {
+    const kaspa = Wallet._kaspa;
+    const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+    const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+    const covAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
+    const covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
+    if (!covUtxo) return;
+    await Covenant.updatePlayerUtxo(kaspa, pk, pub, ocHp, ocGold, ocLevel, s.hp, s.gold, newLevel, covUtxo);
+    s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = newLevel;
+    GameState.save(s);
+    chainEmit('Player::update', action);
+  } catch (err) {
+    // Silently skip — game continues with localStorage
+    console.log('Chain sync skipped:', err.message);
+  }
+}
+
 // ----- Title Screen -----
 async function screenTitle() {
   E.clear();
@@ -323,7 +349,6 @@ async function screenCombat(monster) {
     s.gold += monster.gold;
     E.gold(`  ★ Victory! The ${monster.name} is defeated!`);
     E.line(`  +${monster.xp} XP  +${monster.gold} gold`);
-    chainEmit('Player::state_update', `+${monster.xp} XP, +${monster.gold} gold → Player UTXO recreated`);
 
     const leveled = GameState.checkLevelUp(s);
     if (leveled) {
@@ -331,31 +356,6 @@ async function screenCombat(monster) {
       E.ascii(LEVELUP_ART);
       E.gold(`  ★ LEVEL UP! You are now level ${s.level}!`);
       chainEmit('Player::level_up', `Level ${s.level} — ${titleForLevel(s.level)} | Stats recalculated via ZK proof`);
-
-      // Update covenant UTXO on TN12 with new state
-      if (Wallet._kaspa && Wallet._privateKeyHex && Wallet.funded) {
-        try {
-          const kaspa = Wallet._kaspa;
-          const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
-          const pubkeyHex = pk.toPublicKey().toXOnlyPublicKey().toString();
-          const ocHp = s._onChainHp ?? 20;
-          const ocGold = s._onChainGold ?? 0;
-          const ocLevel = s._onChainLevel ?? 1;
-          const covAddr = Covenant.getCovenantAddress(kaspa, pubkeyHex, ocHp, ocGold, ocLevel);
-          const covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
-          if (covUtxo) {
-            const result = await Covenant.updatePlayerUtxo(
-              kaspa, pk, pubkeyHex, ocHp, ocGold, ocLevel, s.hp, s.gold, s.level, covUtxo
-            );
-            s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = s.level;
-            GameState.save(s);
-            E.dim(`  Covenant updated on TN12: ${(result.transactionId || '').substring(0, 20)}...`);
-            chainEmit('Player::update', `State transition — level ${ocLevel} → ${s.level}`);
-          }
-        } catch (err) {
-          E.dim(`  On-chain update skipped: ${err.message.substring(0, 60)}`);
-        }
-      }
       E.gold(`  ★ Title: ${titleForLevel(s.level)}`);
       E.line(`  HP: ${s.maxHp}  ATK: ${s.attack}  DEF: ${s.defense}`);
       if (s.level >= 12) {
@@ -366,6 +366,7 @@ async function screenCombat(monster) {
     }
 
     GameState.save(s);
+    await syncToChain(s, `Combat: hp=${s.hp} gold=${s.gold} level=${s.level}`);
     E.blank();
     E.dim(`  Fights remaining today: ${s.forestFightsMax - s.forestFightsToday}`);
 
@@ -395,6 +396,7 @@ async function screenDeath() {
   E.blank();
   E.dim(`  The innkeeper drags you back. You lost ${lostGold} gold.`);
   E.line(`  HP restored to ${s.hp}/${s.maxHp}`);
+  await syncToChain(s, `Death: hp=${s.hp} gold=${s.gold} (-${lostGold})`);
   await E.pause();
   await screenTown();
 }
@@ -452,8 +454,8 @@ async function screenShop() {
       s.gold -= POTION_PRICE;
       s.potions++;
       E.cyan(`  Purchased! You now have ${s.potions} potions. Gold: ${s.gold}`);
-      chainEmit('ICC: Player+Shop', `Atomic tx — ${POTION_PRICE}g → Shop, potion → Player`);
       GameState.save(s);
+      await syncToChain(s, `Shop: potion -${POTION_PRICE}g, gold=${s.gold}`);
     } else {
       E.red('  Not enough gold!');
     }
@@ -485,8 +487,8 @@ async function screenShop() {
       if (choice === 'W') s.weapon = { ...selected.item };
       else s.armor = { ...selected.item };
       E.gold(`  Equipped ${selected.item.name}!`);
-      chainEmit('ICC: Player+Shop', `Atomic tx — ${selected.item.price}g → Shop, ${selected.item.name} → Player`);
       GameState.save(s);
+      await syncToChain(s, `Shop: ${selected.item.name} -${selected.item.price}g, gold=${s.gold}`);
     } else {
       E.red('  Not enough gold!');
     }
@@ -527,7 +529,7 @@ async function screenInn() {
       s.hp = s.maxHp;
       GameState.save(s);
       E.cyan(`  You rest deeply. HP fully restored to ${s.maxHp}.`);
-      chainEmit('Player::inn_rest', `1:1 transition — HP ${s.maxHp}/${s.maxHp}, -${cost}g`);
+      await syncToChain(s, `Inn: hp=${s.hp} gold=${s.gold} (-${cost}g)`);
     } else {
       E.red('  Not enough gold! The barkeep frowns.');
     }
@@ -639,6 +641,7 @@ async function screenPvP() {
     E.red('  Defeated in the arena!');
     s.hp = Math.max(1, Math.floor(s.maxHp * 0.1));
     GameState.save(s);
+    await syncToChain(s, `PvP loss: hp=${s.hp}`);
     await E.pause();
     await screenTown();
   } else {
@@ -649,7 +652,7 @@ async function screenPvP() {
     GameState.checkLevelUp(s);
     GameState.save(s);
     E.gold(`  ★ ${opp.name} falls! +${reward} gold, +${opp.level * 30} XP`);
-    chainEmit('ICC: Arena+Player+Player', `PvP resolved — ${s.name} wins, +${reward}g stake released`);
+    await syncToChain(s, `PvP win: +${reward}g, gold=${s.gold}`);
     await E.pause();
     await screenTown();
   }
