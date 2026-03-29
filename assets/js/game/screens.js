@@ -8,9 +8,12 @@ function chainEmit(action, detail, txId) {
   if (typeof Chain !== 'undefined') Chain.emitCovenantTx(action, detail, txId);
 }
 
+// Global chain sync lock — prevents overlapping covenant updates
+let _chainBusy = false;
+
 // ICC shop purchase: Player + Shop covenants in one atomic tx
 async function shopPurchase(s, price, itemName) {
-  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
+  if (_chainBusy || !Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
   if (s._onChainHp === undefined || s._shopGoldCollected === undefined) {
     // Fall back to regular sync if no shop covenant
     return syncToChain(s, `Shop: ${itemName} -${price}g, gold=${s.gold}`);
@@ -47,7 +50,7 @@ async function shopPurchase(s, price, itemName) {
 
 // ICC PvP: Player + Opponent covenants in one atomic tx
 async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
-  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
+  if (_chainBusy || !Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
   if (s._onChainHp === undefined || s._oppHp === undefined) {
     return syncToChain(s, `PvP ${outcome}: hp=${newPlayerHp} gold=${newPlayerGold}`);
   }
@@ -119,9 +122,8 @@ async function syncToChain(s, action) {
   const ocHp = s._onChainHp; const ocGold = s._onChainGold; const ocLevel = s._onChainLevel;
   if (ocHp === undefined) return;
   if (s.hp === ocHp && s.gold === ocGold && s.level === ocLevel) return;
-  // Prevent concurrent syncs
-  if (syncToChain._busy) return;
-  syncToChain._busy = true;
+  if (_chainBusy) return;
+  _chainBusy = true;
   const newLevel = Math.max(s.level, ocLevel);
   try {
     const kaspa = Wallet._kaspa;
@@ -139,7 +141,7 @@ async function syncToChain(s, action) {
         utxoEntry: { amount: String(s._lastPlayerAmount || 10000000), blockDaaScore: '0', isCoinbase: false, scriptPublicKey: currentSpk },
       };
     }
-    if (!covUtxo) { syncToChain._busy = false; return; }
+    if (!covUtxo) { _chainBusy = false; return; }
 
     const result = await Covenant.updatePlayerUtxo(kaspa, pk, pub, ocHp, ocGold, ocLevel, s.hp, s.gold, newLevel, covUtxo);
     const txId = result.transactionId || '';
@@ -152,7 +154,7 @@ async function syncToChain(s, action) {
   } catch (err) {
     console.log('Chain sync skipped:', err.message);
   } finally {
-    syncToChain._busy = false;
+    _chainBusy = false;
   }
 }
 
@@ -319,6 +321,7 @@ async function screenTown(verifyChain) {
         const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
         const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
         const chainState = await Covenant.loadFromChain(kaspa, pub, s);
+        console.log('loadFromChain result:', chainState);
         if (chainState) {
           s.hp = chainState.hp;
           s.gold = chainState.gold;

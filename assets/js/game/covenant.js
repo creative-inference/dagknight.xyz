@@ -379,10 +379,12 @@ const Covenant = {
   // Load player state from chain — finds covenant UTXO and decodes state
   async loadFromChain(kaspa, pubkeyHex, savedState) {
     await this.ensureRpc(kaspa);
+    console.log('loadFromChain: addr:', savedState?._lastCovenantAddr, 'ocHp:', savedState?._onChainHp);
 
     // Strategy 1: use cached P2SH address from last session
     if (savedState?._lastCovenantAddr) {
       const utxo = await this.findCovenantUtxo(savedState._lastCovenantAddr);
+      console.log('Strategy 1:', !!utxo);
       if (utxo) {
         // Reconstruct script from known state to decode
         const ocHp = savedState._onChainHp;
