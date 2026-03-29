@@ -114,19 +114,19 @@ async function screenNewGame() {
       const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
       const pubkeyHex = pk.toPublicKey().toXOnlyPublicKey().toString();
       const s = window._state;
+      // Connect to our TN12 node
+      await Covenant.ensureRpc(kaspa);
       // Wait for faucet tx to confirm
-      const fundingUrl = `${COVENANT_TN12_API}/addresses/${Wallet.address}/utxos`;
-      let utxos = await fetch(fundingUrl).then(r => r.json());
+      let utxos = await Covenant.getUtxos(Wallet.address);
       let retries = 0;
       while ((!utxos || utxos.length === 0) && retries < 10) {
         await new Promise(r => setTimeout(r, 2000));
-        utxos = await fetch(fundingUrl).then(r => r.json());
+        utxos = await Covenant.getUtxos(Wallet.address);
         retries++;
       }
-      const signedTx = await Covenant.createPlayerUtxo(
+      const result = await Covenant.createPlayerUtxo(
         kaspa, pk, pubkeyHex, s.hp, s.gold, 1, utxos
       );
-      const result = await Covenant.submitRest(signedTx);
       const txId = result.transactionId || '';
       // Track on-chain state
       s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = 1;
@@ -344,10 +344,9 @@ async function screenCombat(monster) {
           const covAddr = Covenant.getCovenantAddress(kaspa, pubkeyHex, ocHp, ocGold, ocLevel);
           const covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
           if (covUtxo) {
-            const signedTx = await Covenant.updatePlayerUtxo(
+            const result = await Covenant.updatePlayerUtxo(
               kaspa, pk, pubkeyHex, ocHp, ocGold, ocLevel, s.hp, s.gold, s.level, covUtxo
             );
-            const result = await Covenant.submitRest(signedTx);
             s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = s.level;
             GameState.save(s);
             E.dim(`  Covenant updated on TN12: ${(result.transactionId || '').substring(0, 20)}...`);
