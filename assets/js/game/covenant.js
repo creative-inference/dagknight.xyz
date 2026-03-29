@@ -70,6 +70,32 @@ const Covenant = {
     return utxos && utxos.length > 0 ? utxos[0] : null;
   },
 
+  // Verify on-chain state matches what we expect
+  async verifyOnChainState(kaspa, pubkeyHex, hp, gold, level) {
+    const addr = this.getCovenantAddress(kaspa, pubkeyHex, hp, gold, level);
+    if (!addr) return null;
+    const utxo = await this.findCovenantUtxo(addr);
+    if (utxo) return { hp, gold, level, utxo, address: addr };
+    return null;
+  },
+
+  // Decode state from a P2SH script hex (reverse of buildPlayerScript)
+  decodePlayerState(scriptHex) {
+    if (!scriptHex || scriptHex.length < 120) return null;
+    // owner at hex[2..65], hp at hex[68..83], gold at hex[86..101], level at hex[104..119]
+    const owner = scriptHex.substring(2, 66);
+    const hpHex = scriptHex.substring(68, 84);
+    const goldHex = scriptHex.substring(86, 102);
+    const levelHex = scriptHex.substring(104, 120);
+    const readLE = hex => {
+      const bytes = hex.match(/.{2}/g).map(h => parseInt(h, 16));
+      let val = 0n;
+      for (let i = 7; i >= 0; i--) val = (val << 8n) | BigInt(bytes[i]);
+      return Number(val);
+    };
+    return { owner, hp: readLE(hpHex), gold: readLE(goldHex), level: readLE(levelHex) };
+  },
+
   // Deploy: create the initial Player covenant UTXO
   async createPlayerUtxo(kaspa, privateKey, pubkeyHex, hp, gold, level, fundingUtxos) {
     const script = this.buildPlayerScript(pubkeyHex, hp, gold, level);
