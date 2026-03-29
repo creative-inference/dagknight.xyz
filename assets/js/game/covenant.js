@@ -11,6 +11,11 @@ const COVENANT_NODE_WS = 'wss://tn12.dagknight.xyz';
 // Compiled Player covenant (160 bytes, without_selector=true)
 const PLAYER_SCRIPT_HEX = '20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa08140000000000000008000000000000000008010000000000000057795479876958795879ac69567900a269557900a269547978a269537901207c7e577958cd587c7e577958cd587c7e577958cd587c7e7e7e7eb976c97602a00094013c937cbc7eaa02000001aa7e01207e7c7e01877e00c3876975757575757575757551';
 
+// Compiled Shop covenant (56 bytes, validates output 1)
+// sell(payment:int) — no sig required, anyone can buy
+// State: gold_collected (int64LE at hex offset 2-17)
+const SHOP_SCRIPT_HEX = '0800000000000000007800a0697652799358cd587c7eb976c97601389459937cbc7eaa02000001aa7e01207e7c7e01877e51c38769757551';
+
 function int64LE(n) {
   const buf = new ArrayBuffer(8);
   new DataView(buf).setBigInt64(0, BigInt(n), true);
@@ -77,6 +82,135 @@ const Covenant = {
     const utxo = await this.findCovenantUtxo(addr);
     if (utxo) return { hp, gold, level, utxo, address: addr };
     return null;
+  },
+
+  // --- Shop Covenant ---
+
+  buildShopScript(goldCollected) {
+    let s = SHOP_SCRIPT_HEX;
+    s = s.substring(0, 2) + int64LE(goldCollected) + s.substring(18);
+    return s;
+  },
+
+  getShopAddress(kaspa, goldCollected) {
+    const script = this.buildShopScript(goldCollected);
+    const spk = kaspa.ScriptBuilder.fromScript(script).createPayToScriptHashScript();
+    return kaspa.addressFromScriptPublicKey(spk, 'testnet-12')?.toString();
+  },
+
+  // Deploy shop covenant UTXO
+  async createShopUtxo(kaspa, privateKey, goldCollected, fundingUtxos) {
+    const script = this.buildShopScript(goldCollected);
+    const shopSpk = kaspa.ScriptBuilder.fromScript(script).createPayToScriptHashScript();
+    const playerSpk = kaspa.payToAddressScript(privateKey.toAddress('testnet-12'));
+
+    const inputs = fundingUtxos.filter(u => BigInt(u.utxoEntry?.amount || 0) > 0n).map(u => {
+      const outpoint = { transactionId: u.outpoint.transactionId, index: u.outpoint.index };
+      return {
+        previousOutpoint: outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+        utxo: { outpoint, amount: BigInt(u.utxoEntry.amount), scriptPublicKey: playerSpk, blockDaaScore: BigInt(u.utxoEntry.blockDaaScore || 0), isCoinbase: false },
+      };
+    });
+
+    let totalInput = 0n;
+    for (const inp of inputs) totalInput += inp.utxo.amount;
+    const shopValue = 5000000n;
+    const fee = 10000n;
+    if (totalInput < shopValue + fee) throw new Error('Insufficient funds for shop');
+    const change = totalInput - shopValue - fee;
+
+    const outputs = [{ value: shopValue, scriptPublicKey: shopSpk }];
+    if (change > 0n) outputs.push({ value: change, scriptPublicKey: playerSpk });
+
+    const tx = new kaspa.Transaction({
+      version: 0, inputs, outputs,
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const signedTx = kaspa.signTransaction(tx, [privateKey], false);
+    const rpc = await this.ensureRpc(kaspa);
+    return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+  },
+
+  // ICC: Player buys from Shop — atomic tx with both covenants
+  // Input 0: Player covenant, Input 1: Shop covenant
+  // Output 0: New Player (gold decreased), Output 1: New Shop (gold_collected increased)
+  async purchaseFromShop(kaspa, privateKey, pubkeyHex,
+    curHp, curGold, curLevel,
+    newGold, payment,
+    playerUtxo, shopUtxo, shopGoldCollected
+  ) {
+    const playerScript = this.buildPlayerScript(pubkeyHex, curHp, curGold, curLevel);
+    const newPlayerScript = this.buildPlayerScript(pubkeyHex, curHp, newGold, curLevel);
+    const shopScript = this.buildShopScript(shopGoldCollected);
+    const newShopScript = this.buildShopScript(shopGoldCollected + payment);
+
+    const playerSpk = kaspa.ScriptBuilder.fromScript(playerScript).createPayToScriptHashScript();
+    const newPlayerSpk = kaspa.ScriptBuilder.fromScript(newPlayerScript).createPayToScriptHashScript();
+    const shopSpk = kaspa.ScriptBuilder.fromScript(shopScript).createPayToScriptHashScript();
+    const newShopSpk = kaspa.ScriptBuilder.fromScript(newShopScript).createPayToScriptHashScript();
+
+    const pAmt = BigInt(playerUtxo.utxoEntry.amount);
+    const sAmt = BigInt(shopUtxo.utxoEntry.amount);
+    const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
+
+    // Unsigned tx for signing (player input needs sig)
+    const unsignedTx = new kaspa.Transaction({
+      version: 0,
+      inputs: [
+        {
+          previousOutpoint: playerUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+          utxo: { outpoint: playerUtxo.outpoint, amount: pAmt, scriptPublicKey: playerSpk, blockDaaScore: BigInt(playerUtxo.utxoEntry.blockDaaScore || 0), isCoinbase: false },
+        },
+        {
+          previousOutpoint: shopUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 0,
+          utxo: { outpoint: shopUtxo.outpoint, amount: sAmt, scriptPublicKey: shopSpk, blockDaaScore: BigInt(shopUtxo.utxoEntry.blockDaaScore || 0), isCoinbase: false },
+        },
+      ],
+      outputs: [
+        { value: pAmt - fee, scriptPublicKey: newPlayerSpk },
+        { value: sAmt, scriptPublicKey: newShopSpk },
+      ],
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    // Sign player input (input 0)
+    const sigHex = kaspa.createInputSignature(unsignedTx, 0, privateKey);
+
+    // Player sig_script: <sig> <pubkey> <newHp> <newGold> <newLevel> <redeem>
+    const pubBytes = new Uint8Array(pubkeyHex.match(/.{2}/g).map(h => parseInt(h, 16)));
+    const playerArgSb = new kaspa.ScriptBuilder();
+    playerArgSb.addData(pubBytes);
+    playerArgSb.addI64(BigInt(curHp));
+    playerArgSb.addI64(BigInt(newGold));
+    playerArgSb.addI64(BigInt(curLevel));
+    const playerRedeemSb = new kaspa.ScriptBuilder();
+    playerRedeemSb.addData(new Uint8Array(playerScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+    const playerSigScript = sigHex + playerArgSb.toString() + playerRedeemSb.toString();
+
+    // Shop sig_script: <payment> <redeem>
+    const shopArgSb = new kaspa.ScriptBuilder();
+    shopArgSb.addI64(BigInt(payment));
+    const shopRedeemSb = new kaspa.ScriptBuilder();
+    shopRedeemSb.addData(new Uint8Array(shopScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+    const shopSigScript = shopArgSb.toString() + shopRedeemSb.toString();
+
+    // Rebuild with sig_scripts
+    const signedTx = new kaspa.Transaction({
+      version: 0,
+      inputs: [
+        { previousOutpoint: playerUtxo.outpoint, signatureScript: playerSigScript, sequence: 0n, sigOpCount: 1 },
+        { previousOutpoint: shopUtxo.outpoint, signatureScript: shopSigScript, sequence: 0n, sigOpCount: 0 },
+      ],
+      outputs: [
+        { value: pAmt - fee, scriptPublicKey: newPlayerSpk },
+        { value: sAmt, scriptPublicKey: newShopSpk },
+      ],
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const rpc = await this.ensureRpc(kaspa);
+    return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
   },
 
   // Decode state from a P2SH script hex (reverse of buildPlayerScript)

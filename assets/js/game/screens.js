@@ -8,6 +8,43 @@ function chainEmit(action, detail, txId) {
   if (typeof Chain !== 'undefined') Chain.emitCovenantTx(action, detail, txId);
 }
 
+// ICC shop purchase: Player + Shop covenants in one atomic tx
+async function shopPurchase(s, price, itemName) {
+  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
+  if (s._onChainHp === undefined || s._shopGoldCollected === undefined) {
+    // Fall back to regular sync if no shop covenant
+    return syncToChain(s, `Shop: ${itemName} -${price}g, gold=${s.gold}`);
+  }
+  try {
+    const kaspa = Wallet._kaspa;
+    const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+    const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+    const ocHp = s._onChainHp; const ocGold = s._onChainGold; const ocLevel = s._onChainLevel;
+
+    // Find both covenant UTXOs
+    const playerAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
+    const shopAddr = Covenant.getShopAddress(kaspa, s._shopGoldCollected);
+    const playerUtxo = playerAddr ? await Covenant.findCovenantUtxo(playerAddr) : null;
+    const shopUtxo = shopAddr ? await Covenant.findCovenantUtxo(shopAddr) : null;
+
+    if (!playerUtxo || !shopUtxo) {
+      return syncToChain(s, `Shop: ${itemName} -${price}g, gold=${s.gold}`);
+    }
+
+    const result = await Covenant.purchaseFromShop(
+      kaspa, pk, pub, ocHp, ocGold, ocLevel,
+      s.gold, price, playerUtxo, shopUtxo, s._shopGoldCollected
+    );
+    s._onChainHp = ocHp; s._onChainGold = s.gold; s._onChainLevel = ocLevel;
+    s._shopGoldCollected += price;
+    GameState.save(s);
+    chainEmit('ICC: Player+Shop', `Atomic tx — ${price}g for ${itemName}`, result.transactionId);
+  } catch (err) {
+    console.log('ICC shop failed, falling back:', err.message);
+    await syncToChain(s, `Shop: ${itemName} -${price}g, gold=${s.gold}`);
+  }
+}
+
 // Sync game state to on-chain covenant UTXO
 async function syncToChain(s, action) {
   if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
@@ -161,10 +198,21 @@ async function screenNewGame() {
       const txId = result.transactionId || '';
       // Track on-chain state
       s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = 1;
-      GameState.save(s);
       covSpin.stop('Player covenant UTXO created on TN12!', 't-cyan');
       E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
       chainEmit('Player::create', `Covenant UTXO — ${s.name} the ${CLASSES[classKey].name}`, txId);
+
+      // Deploy Shop covenant
+      try {
+        const shopUtxos = await Covenant.getUtxos(Wallet.address);
+        const shopResult = await Covenant.createShopUtxo(kaspa, pk, 0, shopUtxos);
+        s._shopGoldCollected = 0;
+        E.dim(`  Shop deployed: ${(shopResult.transactionId || '').substring(0, 24)}...`);
+        chainEmit('Shop::create', 'Hash Bazaar covenant UTXO deployed', shopResult.transactionId);
+      } catch (shopErr) {
+        E.dim(`  Shop deployment skipped: ${shopErr.message.substring(0, 40)}`);
+      }
+      GameState.save(s);
     } catch (err) {
       covSpin.stop(`Covenant creation skipped: ${err.message}`, 't-dim');
       chainEmit('Player::create (sim)', `${window._state.name} — localStorage only`);
@@ -463,7 +511,7 @@ async function screenShop() {
       s.potions++;
       E.cyan(`  Purchased! You now have ${s.potions} potions. Gold: ${s.gold}`);
       GameState.save(s);
-      await syncToChain(s, `Shop: potion -${POTION_PRICE}g, gold=${s.gold}`);
+      await shopPurchase(s, POTION_PRICE, 'potion');
     } else {
       E.red('  Not enough gold!');
     }
@@ -496,7 +544,7 @@ async function screenShop() {
       else s.armor = { ...selected.item };
       E.gold(`  Equipped ${selected.item.name}!`);
       GameState.save(s);
-      await syncToChain(s, `Shop: ${selected.item.name} -${selected.item.price}g, gold=${s.gold}`);
+      await shopPurchase(s, selected.item.price, selected.item.name);
     } else {
       E.red('  Not enough gold!');
     }
