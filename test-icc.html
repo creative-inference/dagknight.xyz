@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html><head>
+  <title>ICC Test — Two Covenants, One Transaction</title>
+  <style>
+    body { background: #0a0e14; color: #c0c0c0; font-family: monospace; padding: 2rem; }
+    #log { white-space: pre-wrap; line-height: 1.6; }
+    .ok { color: #70c7ba; } .err { color: #ff6b6b; } .gold { color: #d4a847; }
+    button { margin: 0.3rem; padding: 0.5rem 1rem; background: #1a1e28; color: #70c7ba; border: 1px solid #333; cursor: pointer; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h2>ICC Test — Two P2SH Covenants in One Tx</h2>
+  <div>
+    <button onclick="if(!window._busy){window._busy=true;connectNode().finally(()=>window._busy=false)}">1. Connect</button>
+    <button onclick="if(!window._busy){window._busy=true;deployBoth().finally(()=>window._busy=false)}">2. Deploy Both Covenants</button>
+    <button onclick="if(!window._busy){window._busy=true;spendBoth().finally(()=>window._busy=false)}">3. Spend Both (ICC)</button>
+  </div>
+  <br>
+  <div id="log"></div>
+  <script type="module">
+    const logEl = document.getElementById('log');
+    function log(t, cls) { logEl.innerHTML += cls ? `<span class="${cls}">${t}</span>\n` : t + '\n'; }
+
+    let kaspa, rpc;
+    const NODE_URL = 'wss://tn12.dagknight.xyz';
+
+    // Load WASM
+    const wasmBase = location.hostname === 'localhost'
+      ? './node_modules/@kasdk/web/'
+      : 'https://storage.googleapis.com/vprogs-tweet-images/wasm/';
+    kaspa = await import(wasmBase + 'kaspa.js');
+    await kaspa.default(wasmBase + 'kaspa_bg.wasm');
+    log('WASM loaded', 'ok');
+
+    // Wallet
+    const WALLET_KEY = 'dagknight_wallet';
+    let saved = localStorage.getItem(WALLET_KEY);
+    let keyHex, address;
+    if (saved) {
+      const data = JSON.parse(saved);
+      keyHex = data.key; address = data.address;
+      log(`Wallet: ${address}`, 'ok');
+    } else {
+      log('No wallet — start a game first to create one', 'err');
+    }
+
+    // Contract A: validates output 0 (53 bytes, no introspection opcodes)
+    const CONTRACT_A = '0805000000000000007800a2697858cd587c7eb976c97601359459937cbc7eaa02000001aa7e01207e7c7e01877e00c38769757551';
+    // Contract B: validates output 1 (53 bytes, no introspection opcodes)
+    const CONTRACT_B_TEMPLATE = '080a000000000000007800a2697858cd587c7eb976c97601359459937cbc7eaa02000001aa7e01207e7c7e01877e51c38769757551';
+
+    function buildContract(template, value) {
+      // Replace the int64LE at hex offset 2-17 (after 08 push opcode)
+      const buf = new ArrayBuffer(8);
+      new DataView(buf).setBigInt64(0, BigInt(value), true);
+      const valHex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      return template.substring(0, 2) + valHex + template.substring(18);
+    }
+
+    window.connectNode = async function() {
+      log(`\nConnecting to ${NODE_URL}...`, 'gold');
+      rpc = new kaspa.RpcClient({ url: NODE_URL, encoding: kaspa.Encoding.SerdeJson });
+      window.rpc = rpc;
+      await rpc.connect();
+      const info = await rpc.getBlockDagInfo();
+      log(`Connected! DAA: ${info.virtualDaaScore}`, 'ok');
+    };
+
+    window.deployBoth = async function() {
+      if (!rpc) { log('Connect first!', 'err'); return; }
+      log('\n=== Deploying Two Covenant UTXOs ===', 'gold');
+
+      const pk = new kaspa.PrivateKey(keyHex);
+      const playerSpk = kaspa.payToAddressScript(pk.toAddress('testnet-12'));
+
+      // Get funding UTXOs
+      const utxoResp = await rpc.getUtxosByAddresses({ addresses: [address] });
+      const utxos = utxoResp.entries || utxoResp || [];
+      log(`Funding UTXOs: ${utxos.length}`);
+      if (!utxos.length) { log('No funds!', 'err'); return; }
+
+      // Build scripts
+      const scriptA = buildContract(CONTRACT_A, 5);
+      const scriptB = buildContract(CONTRACT_B_TEMPLATE, 10);
+      const spkA = kaspa.ScriptBuilder.fromScript(scriptA).createPayToScriptHashScript();
+      const spkB = kaspa.ScriptBuilder.fromScript(scriptB).createPayToScriptHashScript();
+      const addrA = kaspa.addressFromScriptPublicKey(spkA, 'testnet-12');
+      const addrB = kaspa.addressFromScriptPublicKey(spkB, 'testnet-12');
+      log(`Covenant A (val=5): ${addrA}`);
+      log(`Covenant B (val=10): ${addrB}`);
+
+      let totalInput = 0n;
+      const inputs = utxos.map(u => {
+        const entry = u.entry || u.utxoEntry || u;
+        const amt = BigInt(entry.amount);
+        totalInput += amt;
+        return {
+          previousOutpoint: u.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+          utxo: { outpoint: u.outpoint, amount: amt, scriptPublicKey: playerSpk, blockDaaScore: BigInt(entry.blockDaaScore || 0), isCoinbase: false },
+        };
+      });
+
+      const covValue = 5000000n;
+      const fee = 10000n;
+      const change = totalInput - covValue * 2n - fee;
+
+      const outputs = [
+        { value: covValue, scriptPublicKey: spkA },
+        { value: covValue, scriptPublicKey: spkB },
+      ];
+      if (change > 0n) outputs.push({ value: change, scriptPublicKey: playerSpk });
+
+      const tx = new kaspa.Transaction({
+        version: 0, inputs, outputs,
+        lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+      });
+      const signedTx = kaspa.signTransaction(tx, [pk], false);
+
+      try {
+        const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+        log(`DEPLOYED! TX: ${result.transactionId}`, 'ok');
+        log('Wait ~5s for confirmation, then click Spend Both', 'gold');
+      } catch(e) { log(`Deploy failed: ${e.message}`, 'err'); }
+    };
+
+    window.spendBoth = async function() {
+      if (!rpc) { log('Connect first!', 'err'); return; }
+      log('\n=== Spending Both Covenants in One Tx (ICC) ===', 'gold');
+
+      const pk = new kaspa.PrivateKey(keyHex);
+      const playerSpk = kaspa.payToAddressScript(pk.toAddress('testnet-12'));
+
+      const scriptA = buildContract(CONTRACT_A, 5);
+      const scriptB = buildContract(CONTRACT_B_TEMPLATE, 10);
+      const spkA = kaspa.ScriptBuilder.fromScript(scriptA).createPayToScriptHashScript();
+      const spkB = kaspa.ScriptBuilder.fromScript(scriptB).createPayToScriptHashScript();
+      const addrA = kaspa.addressFromScriptPublicKey(spkA, 'testnet-12')?.toString();
+      const addrB = kaspa.addressFromScriptPublicKey(spkB, 'testnet-12')?.toString();
+
+      // Find both UTXOs
+      const respA = await rpc.getUtxosByAddresses({ addresses: [addrA] });
+      const respB = await rpc.getUtxosByAddresses({ addresses: [addrB] });
+      const utxosA = respA.entries || respA || [];
+      const utxosB = respB.entries || respB || [];
+      log(`Covenant A UTXOs: ${utxosA.length}`);
+      log(`Covenant B UTXOs: ${utxosB.length}`);
+      if (!utxosA.length || !utxosB.length) { log('Missing covenant UTXOs!', 'err'); return; }
+
+      const uA = utxosA[0]; const eA = uA.entry || uA.utxoEntry || uA;
+      const uB = utxosB[0]; const eB = uB.entry || uB.utxoEntry || uB;
+
+      // New scripts: A goes 5→6, B goes 10→11
+      const newScriptA = buildContract(CONTRACT_A, 6);
+      const newScriptB = buildContract(CONTRACT_B_TEMPLATE, 11);
+      const newSpkA = kaspa.ScriptBuilder.fromScript(newScriptA).createPayToScriptHashScript();
+      const newSpkB = kaspa.ScriptBuilder.fromScript(newScriptB).createPayToScriptHashScript();
+
+      const fee = 10000n;
+      const amtA = BigInt(eA.amount);
+      const amtB = BigInt(eB.amount);
+
+      // Build unsigned tx with both inputs
+      const unsignedTx = new kaspa.Transaction({
+        version: 0,
+        inputs: [
+          {
+            previousOutpoint: uA.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 0,
+            utxo: { outpoint: uA.outpoint, amount: amtA, scriptPublicKey: spkA, blockDaaScore: BigInt(eA.blockDaaScore || 0), isCoinbase: false },
+          },
+          {
+            previousOutpoint: uB.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 0,
+            utxo: { outpoint: uB.outpoint, amount: amtB, scriptPublicKey: spkB, blockDaaScore: BigInt(eB.blockDaaScore || 0), isCoinbase: false },
+          },
+        ],
+        outputs: [
+          { value: amtA - fee, scriptPublicKey: newSpkA },
+          { value: amtB - fee, scriptPublicKey: newSpkB },
+        ],
+        lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+      });
+
+      // Build sig_scripts — each pushes newValue + redeem via ScriptBuilder
+      const sbA = new kaspa.ScriptBuilder();
+      sbA.addI64(6n);
+      sbA.addData(new Uint8Array(scriptA.match(/.{2}/g).map(h => parseInt(h, 16))));
+      const sigA = sbA.toString();
+
+      const sbB = new kaspa.ScriptBuilder();
+      sbB.addI64(11n);
+      sbB.addData(new Uint8Array(scriptB.match(/.{2}/g).map(h => parseInt(h, 16))));
+      const sigB = sbB.toString();
+
+      // Rebuild with sig_scripts
+      const signedTx = new kaspa.Transaction({
+        version: 0,
+        inputs: [
+          { previousOutpoint: uA.outpoint, signatureScript: sigA, sequence: 0n, sigOpCount: 0 },
+          { previousOutpoint: uB.outpoint, signatureScript: sigB, sequence: 0n, sigOpCount: 0 },
+        ],
+        outputs: [
+          { value: amtA - fee, scriptPublicKey: newSpkA },
+          { value: amtB - fee, scriptPublicKey: newSpkB },
+        ],
+        lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+      });
+
+      log(`Input A sigScript: ${sigA.length / 2} bytes`);
+      log(`Input B sigScript: ${sigB.length / 2} bytes`);
+      log('Submitting via wRPC...');
+
+      try {
+        const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+        log(`ICC SUCCESS! TX: ${result.transactionId}`, 'ok');
+        log('Both covenants updated in one atomic transaction!', 'ok');
+      } catch(e) {
+        log(`ICC failed: ${e.message}`, 'err');
+        console.log('TX:', JSON.stringify(signedTx.toJSON(), (k,v) => typeof v === 'bigint' ? v.toString() : v, 2));
+      }
+    };
+  </script>
+</body>
+</html>

@@ -170,15 +170,9 @@ const Covenant = {
     argSb.addI64(BigInt(newGold));
     argSb.addI64(BigInt(newLevel));
 
-    const redeemLen = currentScript.length / 2;
-    let sigScript = sigHex + argSb.toString();
-    if (redeemLen <= 255) {
-      sigScript += '4c' + redeemLen.toString(16).padStart(2, '0');
-    } else {
-      sigScript += '4d' + (redeemLen & 0xff).toString(16).padStart(2, '0')
-                        + ((redeemLen >> 8) & 0xff).toString(16).padStart(2, '0');
-    }
-    sigScript += currentScript;
+    const redeemSb = new kaspa.ScriptBuilder();
+    redeemSb.addData(new Uint8Array(currentScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+    const sigScript = sigHex + argSb.toString() + redeemSb.toString();
 
     const signedTx = new kaspa.Transaction({
       version: 0,
