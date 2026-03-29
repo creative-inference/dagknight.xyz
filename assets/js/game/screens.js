@@ -102,7 +102,7 @@ async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
 
     const txId = result.transactionId || '';
     s._onChainHp = newPlayerHp; s._onChainGold = newPlayerGold; s._onChainLevel = ocLevel;
-    s._lastPlayerTxId = txId; s._lastPlayerAmount = String(BigInt(playerUtxo.utxoEntry.amount) - 10000n);
+    s._lastPlayerTxId = txId; s._lastPlayerAmount = result.playerOutputAmount;
     s._oppHp = newOppHp; s._oppGold = newOppGold;
     s._lastOppTxId = txId; s._lastOppIndex = 1; s._lastOppAmount = String(oppUtxo.utxoEntry.amount);
     GameState.save(s);
@@ -128,35 +128,24 @@ async function syncToChain(s, action) {
     const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
     const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
 
-    // Try to use cached outpoint first (avoids address lookup race)
-    let covUtxo = null;
-    if (s._lastPlayerTxId) {
-      const cachedOutpoint = { transactionId: s._lastPlayerTxId, index: 0 };
-      const covAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
+    // Try address lookup first (gets real amount), fall back to cached outpoint
+    const covAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
+    let covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
+    if (!covUtxo && s._lastPlayerTxId) {
+      // UTXO not indexed yet — use cached outpoint with cached amount
       const currentSpk = kaspa.ScriptBuilder.fromScript(Covenant.buildPlayerScript(pub, ocHp, ocGold, ocLevel)).createPayToScriptHashScript();
       covUtxo = {
-        outpoint: cachedOutpoint,
+        outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
         utxoEntry: { amount: String(s._lastPlayerAmount || 10000000), blockDaaScore: '0', isCoinbase: false, scriptPublicKey: currentSpk },
       };
-    }
-    // Fallback: lookup by address
-    if (!covUtxo || !s._lastPlayerTxId) {
-      const covAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
-      covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
-      if (!covUtxo) {
-        await new Promise(r => setTimeout(r, 2000));
-        covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
-      }
     }
     if (!covUtxo) { syncToChain._busy = false; return; }
 
     const result = await Covenant.updatePlayerUtxo(kaspa, pk, pub, ocHp, ocGold, ocLevel, s.hp, s.gold, newLevel, covUtxo);
     const txId = result.transactionId || '';
     s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = newLevel;
-    // Cache the new outpoint for next sync
     s._lastPlayerTxId = txId;
-    const txJson = JSON.parse(JSON.stringify(result, (k,v) => typeof v === 'bigint' ? v.toString() : v));
-    s._lastPlayerAmount = covUtxo.utxoEntry?.amount ? String(BigInt(covUtxo.utxoEntry.amount) - 10000n) : '9990000';
+    s._lastPlayerAmount = result.playerOutputAmount;
     GameState.save(s);
     chainEmit('Player::update', action, txId);
   } catch (err) {

@@ -195,7 +195,8 @@ const Covenant = {
     });
 
     const rpc = await this.ensureRpc(kaspa);
-    return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+    const rpcResult = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+    return { transactionId: rpcResult.transactionId, playerOutputAmount: String(pAmt - fee) };
   },
 
   // Deploy shop covenant UTXO
@@ -452,16 +453,18 @@ const Covenant = {
     redeemSb.addData(new Uint8Array(currentScript.match(/.{2}/g).map(h => parseInt(h, 16))));
     const sigScript = sigHex + argSb.toString() + redeemSb.toString();
 
+    const outputAmount = covenantValue - fee;
     const signedTx = new kaspa.Transaction({
       version: 0,
       inputs: [{
         previousOutpoint: outpoint, signatureScript: sigScript, sequence: 0n, sigOpCount: 1,
       }],
-      outputs: [{ value: covenantValue - fee, scriptPublicKey: newSpk }],
+      outputs: [{ value: outputAmount, scriptPublicKey: newSpk }],
       lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
     });
 
     const rpc = await this.ensureRpc(kaspa);
-    return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+    const rpcResult = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+    return { transactionId: rpcResult.transactionId, playerOutputAmount: String(outputAmount) };
   },
 };
