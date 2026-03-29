@@ -38,10 +38,13 @@
     let kaspa; window.rpc = null; let rpc;
     const NODE_URL = 'wss://tn12.dagknight.xyz';
 
-    // Load WASM
+    // Load WASM — CDN for production, local for dev
     log('Loading @kasdk/web...');
-    kaspa = await import('./node_modules/@kasdk/web/kaspa.js');
-    await kaspa.default('./node_modules/@kasdk/web/kaspa_bg.wasm');
+    const wasmBase = location.hostname === 'localhost'
+      ? './node_modules/@kasdk/web/'
+      : 'https://storage.googleapis.com/vprogs-tweet-images/wasm/';
+    kaspa = await import(wasmBase + 'kaspa.js');
+    await kaspa.default(wasmBase + 'kaspa_bg.wasm');
     log('WASM loaded', 'ok');
 
     // Load wallet
