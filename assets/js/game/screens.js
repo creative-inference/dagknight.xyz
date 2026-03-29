@@ -47,7 +47,8 @@ async function shopPurchase(s, price, itemName) {
 
 // ICC PvP: Player + Opponent covenants in one atomic tx
 async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
-  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
+  console.log('pvpOnChain called:', outcome, 'hp:', newPlayerHp, 'gold:', newPlayerGold);
+  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) { console.log('pvp: no wallet'); return; }
   if (s._onChainHp === undefined || s._oppHp === undefined) {
     return syncToChain(s, `PvP ${outcome}: hp=${newPlayerHp} gold=${newPlayerGold}`);
   }
@@ -59,10 +60,16 @@ async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
 
     const playerAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
     const oppAddr = Covenant.getOpponentAddress(kaspa, s._oppHp, s._oppGold);
-    const playerUtxo = playerAddr ? await Covenant.findCovenantUtxo(playerAddr) : null;
-    const oppUtxo = oppAddr ? await Covenant.findCovenantUtxo(oppAddr) : null;
+    let playerUtxo = playerAddr ? await Covenant.findCovenantUtxo(playerAddr) : null;
+    let oppUtxo = oppAddr ? await Covenant.findCovenantUtxo(oppAddr) : null;
+    if (!playerUtxo || !oppUtxo) {
+      await new Promise(r => setTimeout(r, 2000));
+      playerUtxo = playerAddr ? await Covenant.findCovenantUtxo(playerAddr) : null;
+      oppUtxo = oppAddr ? await Covenant.findCovenantUtxo(oppAddr) : null;
+    }
 
     if (!playerUtxo || !oppUtxo) {
+      console.log('pvp: missing UTXO after retry, falling back');
       return syncToChain(s, `PvP ${outcome}: hp=${newPlayerHp} gold=${newPlayerGold}`);
     }
 
@@ -102,7 +109,12 @@ async function syncToChain(s, action) {
     const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
     const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
     const covAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
-    const covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
+    let covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
+    if (!covUtxo) {
+      // UTXO from last update may not be indexed yet — retry once
+      await new Promise(r => setTimeout(r, 2000));
+      covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
+    }
     if (!covUtxo) return;
     const result = await Covenant.updatePlayerUtxo(kaspa, pk, pub, ocHp, ocGold, ocLevel, s.hp, s.gold, newLevel, covUtxo);
     const txId = result.transactionId || '';
