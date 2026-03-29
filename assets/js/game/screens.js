@@ -242,7 +242,7 @@ async function screenForest() {
   E.blank();
   E.dim(`  Fights remaining today: ${s.forestFightsMax - s.forestFightsToday}`);
 
-  chainEmit('Game::encounter', `Episodic Game UTXO created — ${monster.name} spawned`);
+  chainEmit('Game::encounter', `${monster.name} spawned (ICC coming soon)`);
 
   const choice = await E.menu([
     { key: 'F', label: 'Fight!' },
@@ -327,7 +327,7 @@ async function screenCombat(monster) {
       );
       monster.hp = result.defenderHp;
       log.push({ fn: E.gold.bind(E), text: `  You strike the ${monster.name} for ${result.damage} damage!` });
-      chainEmit('Game::combat', `Player → ${monster.name} | -${result.damage} HP | ZK proof validated`);
+      chainEmit('Game::combat', `Player → ${monster.name} | -${result.damage} HP (ZK coming soon)`);
     }
 
     // Monster attacks back if alive
@@ -355,7 +355,7 @@ async function screenCombat(monster) {
       E.blank();
       E.ascii(LEVELUP_ART);
       E.gold(`  ★ LEVEL UP! You are now level ${s.level}!`);
-      chainEmit('Player::level_up', `Level ${s.level} — ${titleForLevel(s.level)} | Stats recalculated via ZK proof`);
+      chainEmit('Player::level_up', `Level ${s.level} — ${titleForLevel(s.level)}`);
       E.gold(`  ★ Title: ${titleForLevel(s.level)}`);
       E.line(`  HP: ${s.maxHp}  ATK: ${s.attack}  DEF: ${s.defense}`);
       if (s.level >= 12) {
@@ -624,7 +624,7 @@ async function screenPvP() {
       );
       opp.hp = r1.defenderHp;
       pvpLog.push({ fn: E.gold.bind(E), text: `  You strike ${opp.name} for ${r1.damage}!` });
-      chainEmit('Arena::combat', `Player → ${opp.name} | -${r1.damage} HP`);
+      chainEmit('Arena::combat', `Player → ${opp.name} | -${r1.damage} HP (ICC coming soon)`);
     }
 
     if (opp.hp > 0) {
