@@ -175,30 +175,8 @@ async function screenTitle() {
   const choice = await E.menu(opts);
   if (choice === 'C') {
     window._state = GameState.load();
-    const s = window._state;
-    // Load WASM + connect to node, verify/load chain state
-    try {
-      await Wallet.ensureAddress();
-      if (Wallet._kaspa && Wallet._privateKeyHex) {
-        const kaspa = Wallet._kaspa;
-        const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
-        const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
-        const chainState = await Covenant.loadFromChain(kaspa, pub, s);
-        if (chainState) {
-          // Chain is always the source of truth
-          s.hp = chainState.hp;
-          s.gold = chainState.gold;
-          s.level = chainState.level;
-          s._onChainHp = chainState.hp;
-          s._onChainGold = chainState.gold;
-          s._onChainLevel = chainState.level;
-          s._lastCovenantAddr = chainState.address;
-          GameState.save(s);
-          s._pendingChainVerify = chainState;
-        }
-      }
-    } catch { /* silent — game works without chain */ }
-    await screenTown();
+    // WASM + node connection happens in screenTown
+    await screenTown(true);
   } else if (choice === 'N') {
     await screenNewGame();
   } else {
@@ -323,19 +301,43 @@ async function screenNewGame() {
 }
 
 // ----- Town -----
-async function screenTown() {
+async function screenTown(verifyChain) {
   const s = window._state;
   E.clear();
   E.ascii(TOWN_ART);
   E.gold(`  ${s.name} the ${titleForLevel(s.level)}`);
   E.line(`  Level ${s.level}  |  HP: ${s.hp}/${s.maxHp}  |  Gold: ${s.gold}`);
   E.line(`  ATK: ${s.attack}+${s.weapon.bonus}  DEF: ${s.defense}+${s.armor.bonus}  |  Fights: ${s.forestFightsMax - s.forestFightsToday} left`);
-  if (s._pendingChainVerify) {
-    const cv = s._pendingChainVerify;
-    if (cv.hp !== undefined) {
-      chainEmit('Player::verified', `Covenant loaded from TN12: hp=${cv.hp} gold=${cv.gold} level=${cv.level} (${cv.amount} sompi)`, false);
-    }
-    delete s._pendingChainVerify;
+
+  // Verify/load chain state on first town entry after Continue Quest
+  if (verifyChain) {
+    try {
+      await Wallet.ensureAddress();
+      if (Wallet._kaspa && Wallet._privateKeyHex) {
+        const kaspa = Wallet._kaspa;
+        await Covenant.ensureRpc(kaspa);
+        const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+        const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+        const chainState = await Covenant.loadFromChain(kaspa, pub, s);
+        if (chainState) {
+          s.hp = chainState.hp;
+          s.gold = chainState.gold;
+          s.level = chainState.level;
+          s._onChainHp = chainState.hp;
+          s._onChainGold = chainState.gold;
+          s._onChainLevel = chainState.level;
+          s._lastCovenantAddr = chainState.address;
+          GameState.save(s);
+          chainEmit('Player::verified', `Covenant loaded from TN12: hp=${chainState.hp} gold=${chainState.gold} level=${chainState.level} (${chainState.amount} sompi)`, false);
+          // Redraw stats with corrected values
+          E.clear();
+          E.ascii(TOWN_ART);
+          E.gold(`  ${s.name} the ${titleForLevel(s.level)}`);
+          E.line(`  Level ${s.level}  |  HP: ${s.hp}/${s.maxHp}  |  Gold: ${s.gold}`);
+          E.line(`  ATK: ${s.attack}+${s.weapon.bonus}  DEF: ${s.defense}+${s.armor.bonus}  |  Fights: ${s.forestFightsMax - s.forestFightsToday} left`);
+        }
+      }
+    } catch { /* silent */ }
   } else if (s._onChainLevel !== undefined) {
     chainEmit('Player::state', `hp=${s._onChainHp} gold=${s._onChainGold} level=${s._onChainLevel}`, false);
   }
