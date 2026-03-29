@@ -187,8 +187,8 @@ async function screenTown() {
   E.gold(`  ${s.name} the ${titleForLevel(s.level)}`);
   E.line(`  Level ${s.level}  |  HP: ${s.hp}/${s.maxHp}  |  Gold: ${s.gold}`);
   E.line(`  ATK: ${s.attack}+${s.weapon.bonus}  DEF: ${s.defense}+${s.armor.bonus}  |  Fights: ${s.forestFightsMax - s.forestFightsToday} left`);
-  if (s._onChainLevel !== undefined && Covenant._rpc) {
-    E.dim(`  Covenant: hp=${s._onChainHp} gold=${s._onChainGold} level=${s._onChainLevel} (TN12)`);
+  if (s._onChainLevel !== undefined) {
+    chainEmit('Player::state', `hp=${s._onChainHp} gold=${s._onChainGold} level=${s._onChainLevel}`, false);
   }
   E.blank();
 

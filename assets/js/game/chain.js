@@ -103,7 +103,7 @@ const Chain = {
       `<span class="ce-time">${this._timestamp()}</span> ` +
       `<span class="ce-label">COV TX</span> ` +
       `<span class="ce-label">${action}</span>` +
-      `${txId ? '' : ' (simulated)'}<br>` +
+      `${txId === false ? '' : (txId ? '' : ' (simulated)')}<br>` +
       `<span class="ce-detail">  ${detail}</span>` +
       txLink;
 
