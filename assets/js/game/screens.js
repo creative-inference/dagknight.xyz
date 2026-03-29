@@ -146,6 +146,7 @@ async function syncToChain(s, action) {
     s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = newLevel;
     s._lastPlayerTxId = txId;
     s._lastPlayerAmount = result.playerOutputAmount;
+    s._lastCovenantAddr = Covenant.getCovenantAddress(kaspa, pub, s.hp, s.gold, newLevel);
     GameState.save(s);
     chainEmit('Player::update', action, txId);
   } catch (err) {
@@ -174,12 +175,33 @@ async function screenTitle() {
   const choice = await E.menu(opts);
   if (choice === 'C') {
     window._state = GameState.load();
-    // Load WASM + connect to node for covenant operations
-    Wallet.ensureAddress().then(async () => {
+    const s = window._state;
+    // Load WASM + connect to node, verify/load chain state
+    try {
+      await Wallet.ensureAddress();
       if (Wallet._kaspa && Wallet._privateKeyHex) {
-        try { await Covenant.ensureRpc(Wallet._kaspa); } catch {}
+        const kaspa = Wallet._kaspa;
+        const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+        const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+        const chainState = await Covenant.loadFromChain(kaspa, pub, s);
+        if (chainState) {
+          // Chain state found — use it as source of truth
+          if (chainState.hp !== s._onChainHp || chainState.gold !== s._onChainGold || chainState.level !== s._onChainLevel) {
+            s.hp = chainState.hp;
+            s.gold = chainState.gold;
+            s.level = chainState.level;
+            s._onChainHp = chainState.hp;
+            s._onChainGold = chainState.gold;
+            s._onChainLevel = chainState.level;
+            s._lastCovenantAddr = chainState.address;
+            GameState.save(s);
+            E.dim(`  State loaded from TN12: hp=${chainState.hp} gold=${chainState.gold} level=${chainState.level}`);
+          } else {
+            E.dim(`  Covenant verified on TN12 (${chainState.amount} sompi)`);
+          }
+        }
       }
-    }).catch(() => {});
+    } catch { /* silent — game works without chain */ }
     await screenTown();
   } else if (choice === 'N') {
     await screenNewGame();
@@ -281,6 +303,7 @@ async function screenNewGame() {
       const txId = result.transactionId || '';
       s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = 1;
       s._lastPlayerTxId = txId; s._lastPlayerAmount = '10000000';
+      s._lastCovenantAddr = Covenant.getCovenantAddress(kaspa, pubkeyHex, s.hp, s.gold, 1);
       s._shopGoldCollected = 0;
       s._oppHp = 50; s._oppGold = 100;
       s._lastOppTxId = txId; s._lastOppIndex = 2; s._lastOppAmount = '5000000';

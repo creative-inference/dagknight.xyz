@@ -361,18 +361,56 @@ const Covenant = {
   // Decode state from a P2SH script hex (reverse of buildPlayerScript)
   decodePlayerState(scriptHex) {
     if (!scriptHex || scriptHex.length < 120) return null;
-    // owner at hex[2..65], hp at hex[68..83], gold at hex[86..101], level at hex[104..119]
     const owner = scriptHex.substring(2, 66);
-    const hpHex = scriptHex.substring(68, 84);
-    const goldHex = scriptHex.substring(86, 102);
-    const levelHex = scriptHex.substring(104, 120);
     const readLE = hex => {
       const bytes = hex.match(/.{2}/g).map(h => parseInt(h, 16));
       let val = 0n;
       for (let i = 7; i >= 0; i--) val = (val << 8n) | BigInt(bytes[i]);
       return Number(val);
     };
-    return { owner, hp: readLE(hpHex), gold: readLE(goldHex), level: readLE(levelHex) };
+    return {
+      owner,
+      hp: readLE(scriptHex.substring(68, 84)),
+      gold: readLE(scriptHex.substring(86, 102)),
+      level: readLE(scriptHex.substring(104, 120)),
+    };
+  },
+
+  // Load player state from chain — finds covenant UTXO and decodes state
+  async loadFromChain(kaspa, pubkeyHex, savedState) {
+    await this.ensureRpc(kaspa);
+
+    // Strategy 1: use cached P2SH address from last session
+    if (savedState?._lastCovenantAddr) {
+      const utxo = await this.findCovenantUtxo(savedState._lastCovenantAddr);
+      if (utxo) {
+        // Reconstruct script from known state to decode
+        const ocHp = savedState._onChainHp;
+        const ocGold = savedState._onChainGold;
+        const ocLevel = savedState._onChainLevel;
+        if (ocHp !== undefined) {
+          return { hp: ocHp, gold: ocGold, level: ocLevel, utxo, address: savedState._lastCovenantAddr, amount: utxo.utxoEntry.amount };
+        }
+      }
+    }
+
+    // Strategy 2: try last known on-chain state
+    if (savedState?._onChainHp !== undefined) {
+      const addr = this.getCovenantAddress(kaspa, pubkeyHex, savedState._onChainHp, savedState._onChainGold, savedState._onChainLevel);
+      const utxo = addr ? await this.findCovenantUtxo(addr) : null;
+      if (utxo) {
+        return { hp: savedState._onChainHp, gold: savedState._onChainGold, level: savedState._onChainLevel, utxo, address: addr, amount: utxo.utxoEntry.amount };
+      }
+    }
+
+    // Strategy 3: try default initial state
+    const defaultAddr = this.getCovenantAddress(kaspa, pubkeyHex, 20, 0, 1);
+    const defaultUtxo = defaultAddr ? await this.findCovenantUtxo(defaultAddr) : null;
+    if (defaultUtxo) {
+      return { hp: 20, gold: 0, level: 1, utxo: defaultUtxo, address: defaultAddr, amount: defaultUtxo.utxoEntry.amount };
+    }
+
+    return null; // covenant not found
   },
 
   // Deploy: create the initial Player covenant UTXO
