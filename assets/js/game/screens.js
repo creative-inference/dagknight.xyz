@@ -110,20 +110,27 @@ async function screenNewGame() {
   if (Wallet._kaspa && Wallet._privateKeyHex && Wallet.funded) {
     const covSpin = E.spinner('Inscribing covenant on the BlockDAG...');
     try {
-      const pk = new Wallet._kaspa.PrivateKey(Wallet._privateKeyHex);
+      const kaspa = Wallet._kaspa;
+      const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
       const pubkeyHex = pk.toPublicKey().toXOnlyPublicKey().toString();
       const s = window._state;
       // Wait for faucet tx to confirm
-      let utxos = await Covenant.getUtxos(Wallet.address);
+      const fundingUrl = `${COVENANT_TN12_API}/addresses/${Wallet.address}/utxos`;
+      let utxos = await fetch(fundingUrl).then(r => r.json());
       let retries = 0;
       while ((!utxos || utxos.length === 0) && retries < 10) {
         await new Promise(r => setTimeout(r, 2000));
-        utxos = await Covenant.getUtxos(Wallet.address);
+        utxos = await fetch(fundingUrl).then(r => r.json());
         retries++;
       }
-      const txId = await Covenant.createPlayerUtxo(
-        Wallet._kaspa, pk, pubkeyHex, s.hp, s.gold, 1, utxos
+      const signedTx = await Covenant.createPlayerUtxo(
+        kaspa, pk, pubkeyHex, s.hp, s.gold, 1, utxos
       );
+      const result = await Covenant.submitRest(signedTx);
+      const txId = result.transactionId || '';
+      // Track on-chain state
+      s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = 1;
+      GameState.save(s);
       covSpin.stop('Player covenant UTXO created on TN12!', 't-cyan');
       E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
       chainEmit('Player::create', `Covenant UTXO — ${s.name} the ${CLASSES[classKey].name}`);
@@ -325,24 +332,26 @@ async function screenCombat(monster) {
       E.gold(`  ★ LEVEL UP! You are now level ${s.level}!`);
       chainEmit('Player::level_up', `Level ${s.level} — ${titleForLevel(s.level)} | Stats recalculated via ZK proof`);
 
-      // Update covenant UTXO on TN12 with new level
+      // Update covenant UTXO on TN12 with new state
       if (Wallet._kaspa && Wallet._privateKeyHex && Wallet.funded) {
         try {
-          const pk = new Wallet._kaspa.PrivateKey(Wallet._privateKeyHex);
+          const kaspa = Wallet._kaspa;
+          const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
           const pubkeyHex = pk.toPublicKey().toXOnlyPublicKey().toString();
-          // Search for covenant at any previous level (may not have been updated on-chain)
-          let covUtxo = null;
-          let onChainLevel = s.level - 1;
-          for (let lvl = s.level - 1; lvl >= 1; lvl--) {
-            covUtxo = await Covenant.findCovenantUtxo(Wallet._kaspa, pubkeyHex, lvl);
-            if (covUtxo) { onChainLevel = lvl; break; }
-          }
+          const ocHp = s._onChainHp ?? 20;
+          const ocGold = s._onChainGold ?? 0;
+          const ocLevel = s._onChainLevel ?? 1;
+          const covAddr = Covenant.getCovenantAddress(kaspa, pubkeyHex, ocHp, ocGold, ocLevel);
+          const covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
           if (covUtxo) {
-            const txId = await Covenant.spendPlayerUtxo(
-              Wallet._kaspa, pk, pubkeyHex, onChainLevel, s.level, covUtxo
+            const signedTx = await Covenant.updatePlayerUtxo(
+              kaspa, pk, pubkeyHex, ocHp, ocGold, ocLevel, s.hp, s.gold, s.level, covUtxo
             );
-            E.dim(`  Covenant updated on TN12: ${txId.substring(0, 20)}...`);
-            chainEmit('Player::spend', `Covenant UTXO spent — level ${s.level - 1} → ${s.level}`);
+            const result = await Covenant.submitRest(signedTx);
+            s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = s.level;
+            GameState.save(s);
+            E.dim(`  Covenant updated on TN12: ${(result.transactionId || '').substring(0, 20)}...`);
+            chainEmit('Player::update', `State transition — level ${ocLevel} → ${s.level}`);
           }
         } catch (err) {
           E.dim(`  On-chain update skipped: ${err.message.substring(0, 60)}`);
