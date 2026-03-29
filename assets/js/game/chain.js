@@ -95,7 +95,7 @@ const Chain = {
     if (!this._feed) return;
 
     const txLink = txId
-      ? `<br><a href="https://tn12.kaspa.stream/txs/${txId}" target="_blank" rel="noopener" class="ce-txlink">${txId.substring(0, 16)}...</a>`
+      ? `<br><a href="https://tn12.kaspa.stream/transactions/${txId}" target="_blank" rel="noopener" class="ce-txlink">${txId.substring(0, 16)}...</a>`
       : '';
     const el = document.createElement('div');
     el.className = 'chain-entry covenant-tx';
