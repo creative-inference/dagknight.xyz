@@ -94,11 +94,13 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
     </div>
 
     <div class="game-tech-note" style="margin-top: 2.5rem;">
-      <h3>Status: On-Chain State Transitions LIVE on TN12</h3>
+      <h3>Status: On-Chain Covenants + ICC LIVE on TN12</h3>
       <p style="color: var(--text); margin-bottom: 0.5rem;">
-        Character creation deploys a <strong>160-byte SilverScript covenant</strong> on Kaspa Testnet-12.
-        Level-ups trigger real <code>validateOutputState</code> transactions &mdash; owner-signed with Schnorr,
-        state-validated by the L1. No backend. Browser talks to our TN12 node via wRPC WebSocket.
+        Character creation deploys a <strong>Player covenant</strong> (160 bytes) and a <strong>Shop covenant</strong> (56 bytes)
+        on Kaspa Testnet-12 in a single transaction. Every game action &mdash; combat, shopping, resting, death &mdash;
+        updates the covenant on-chain via <code>validateOutputState</code>, owner-signed with Schnorr.
+        Shop purchases use <strong>ICC</strong>: Player + Shop covenants updated atomically in one tx.
+        No backend. Browser talks to our TN12 node via wRPC WebSocket.
       </p>
     </div>
     <p style="text-align: center; margin-top: 1rem;">

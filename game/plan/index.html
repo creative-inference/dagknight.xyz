@@ -128,7 +128,12 @@ GitHub Pages (static)          TN12 Node
         <div class="tech-row">
           <span class="tech-game" style="color: var(--primary);">&#x2705; Game Integration</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Level-up during gameplay triggers on-chain covenant state update automatically</span>
+          <span class="tech-chain">Every game action (combat, shop, inn, PvP, death) triggers on-chain covenant state update</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game" style="color: var(--primary);">&#x2705; ICC: Player+Shop</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Atomic transaction: Player covenant (gold decreased) + Shop covenant (gold collected) — two P2SH inputs, two outputs, one tx</span>
         </div>
       </div>
     </div>
@@ -158,12 +163,12 @@ GitHub Pages (static)          TN12 Node
     </div>
     <div class="pillars" style="margin-bottom: 2rem;">
       <div class="pillar-card">
-        <div class="pillar-icon">&#x1F3EA;</div>
-        <h3>shop.sil (Next)</h3>
+        <div class="pillar-icon">&#x2705;</div>
+        <h3>shop.sil (LIVE)</h3>
         <p>
-          <strong>Persistent shared state.</strong> Holds inventory and prices.
-          ICC with Player covenant: atomic tx validates gold transfer + item grant.
-          No trusted shopkeeper.
+          <strong>Persistent shared state.</strong> 56 bytes compiled from SilverScript.
+          Tracks gold collected. ICC with Player covenant: atomic tx validates
+          gold transfer in a single transaction. Two covenants, one tx, zero trust.
         </p>
       </div>
       <div class="pillar-card">
