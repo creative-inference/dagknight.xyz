@@ -304,6 +304,7 @@ async function screenNewGame() {
       chainEmit('Player::create (sim)', `${window._state.name} — localStorage only`);
     }
   } else {
+    console.log('Covenant skip: kaspa:', !!Wallet._kaspa, 'key:', !!Wallet._privateKeyHex, 'funded:', Wallet.funded);
     chainEmit('Player::create (sim)', `${window._state.name} — localStorage only`);
   }
 
