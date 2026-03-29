@@ -55,25 +55,11 @@ async function screenTitle() {
   if (choice === 'C') {
     window._state = GameState.load();
     // Load WASM + connect to node for covenant operations
-    try {
-      await Wallet.ensureAddress();
+    Wallet.ensureAddress().then(async () => {
       if (Wallet._kaspa && Wallet._privateKeyHex) {
-        const kaspa = Wallet._kaspa;
-        await Covenant.ensureRpc(kaspa);
-        const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
-        const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
-        const s = window._state;
-        const ocHp = s._onChainHp; const ocGold = s._onChainGold; const ocLevel = s._onChainLevel;
-        if (ocHp !== undefined) {
-          const verified = await Covenant.verifyOnChainState(kaspa, pub, ocHp, ocGold, ocLevel);
-          if (verified) {
-            E.dim(`  Covenant verified on TN12 (${BigInt(verified.utxo.utxoEntry.amount)} sompi)`);
-          } else {
-            E.dim('  Covenant UTXO not found — state may be stale');
-          }
-        }
+        try { await Covenant.ensureRpc(Wallet._kaspa); } catch {}
       }
-    } catch { /* silent — game works without chain */ }
+    }).catch(() => {});
     await screenTown();
   } else if (choice === 'N') {
     await screenNewGame();
@@ -201,6 +187,9 @@ async function screenTown() {
   E.gold(`  ${s.name} the ${titleForLevel(s.level)}`);
   E.line(`  Level ${s.level}  |  HP: ${s.hp}/${s.maxHp}  |  Gold: ${s.gold}`);
   E.line(`  ATK: ${s.attack}+${s.weapon.bonus}  DEF: ${s.defense}+${s.armor.bonus}  |  Fights: ${s.forestFightsMax - s.forestFightsToday} left`);
+  if (s._onChainLevel !== undefined && Covenant._rpc) {
+    E.dim(`  Covenant: hp=${s._onChainHp} gold=${s._onChainGold} level=${s._onChainLevel} (TN12)`);
+  }
   E.blank();
 
   const opts = [
