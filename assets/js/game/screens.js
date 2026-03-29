@@ -185,16 +185,15 @@ async function screenTitle() {
         const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
         const chainState = await Covenant.loadFromChain(kaspa, pub, s);
         if (chainState) {
-          if (chainState.hp !== s._onChainHp || chainState.gold !== s._onChainGold || chainState.level !== s._onChainLevel) {
-            s.hp = chainState.hp;
-            s.gold = chainState.gold;
-            s.level = chainState.level;
-            s._onChainHp = chainState.hp;
-            s._onChainGold = chainState.gold;
-            s._onChainLevel = chainState.level;
-            s._lastCovenantAddr = chainState.address;
-            GameState.save(s);
-          }
+          // Chain is always the source of truth
+          s.hp = chainState.hp;
+          s.gold = chainState.gold;
+          s.level = chainState.level;
+          s._onChainHp = chainState.hp;
+          s._onChainGold = chainState.gold;
+          s._onChainLevel = chainState.level;
+          s._lastCovenantAddr = chainState.address;
+          GameState.save(s);
           s._pendingChainVerify = chainState;
         }
       }
