@@ -135,6 +135,16 @@ GitHub Pages (static)          TN12 Node
           <span class="tech-arrow">&rarr;</span>
           <span class="tech-chain">Atomic transaction: Player covenant (gold decreased) + Shop covenant (gold collected) — two P2SH inputs, two outputs, one tx</span>
         </div>
+        <div class="tech-row">
+          <span class="tech-game" style="color: var(--primary);">&#x2705; ICC: Player+Opponent</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Atomic PvP: Player + NPC Opponent covenants updated in one tx — winner gains gold, loser loses gold</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game" style="color: var(--primary);">&#x2705; UTXO Outpoint Caching</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Cached tx outpoints eliminate UTXO lookup race conditions for rapid state updates at 10 BPS</span>
+        </div>
       </div>
     </div>
 
@@ -172,12 +182,13 @@ GitHub Pages (static)          TN12 Node
         </p>
       </div>
       <div class="pillar-card">
-        <div class="pillar-icon">&#x1F3DF;</div>
-        <h3>arena.sil (Next)</h3>
+        <div class="pillar-icon">&#x2705;</div>
+        <h3>opponent.sil (LIVE)</h3>
         <p>
-          <strong>PvP with staked KAS.</strong> Two Player covenant inputs + Arena covenant.
-          Timeout via <code>this.age</code> introspection.
-          Winner gets the pot.
+          <strong>PvP NPC covenant.</strong> 80 bytes compiled from SilverScript.
+          Tracks opponent HP and gold. ICC with Player covenant: atomic PvP resolution
+          in a single transaction. Winner gains gold, loser loses gold. Three covenants
+          deployed per player: 296 bytes total on-chain.
         </p>
       </div>
     </div>
