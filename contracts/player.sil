@@ -1,6 +1,8 @@
 pragma silverscript ^0.1.0;
 
-// DAG Gate — Player Covenant (no-sig version for testing validateOutputState)
+// DAG Gate — Player Covenant (with checkSig)
+// Single entrypoint, owner-signed state transitions.
+// Owner is the raw x-only pubkey (32 bytes).
 
 contract Player(
     byte[32] init_owner,
@@ -13,7 +15,9 @@ contract Player(
     int gold = init_gold;
     int level = init_level;
 
-    entrypoint function update(int newHp, int newGold, int newLevel) {
+    entrypoint function update(sig owner_sig, pubkey owner_pk, int newHp, int newGold, int newLevel) {
+        require(owner_pk == owner);
+        require(checkSig(owner_sig, owner_pk));
         require(newHp >= 0);
         require(newGold >= 0);
         require(newLevel >= level);

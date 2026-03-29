@@ -63,11 +63,12 @@
     }
 
     // Covenant script
-    // No-sig player contract (146 bytes, without_selector=true)
-    // update(newHp, newGold, newLevel) + validateOutputState — no checkSig for testing
-    const PLAYER_SCRIPT_HEX = '20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa081400000000000000080000000000000000080100000000000000567900a269557900a269547978a269537901207c7e577958cd587c7e577958cd587c7e577958cd587c7e7e7e7eb976c97602920094013c937cbc7eaa02000001aa7e01207e7c7e01877e00c387697575757575757551';
+    // Player contract with checkSig (160 bytes, without_selector=true)
+    // owner = raw x-only pubkey, require(owner_pk == owner)
+    const PLAYER_SCRIPT_HEX = '20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa08140000000000000008000000000000000008010000000000000057795479876958795879ac69567900a269557900a269547978a269537901207c7e577958cd587c7e577958cd587c7e577958cd587c7e7e7e7eb976c97602a00094013c937cbc7eaa02000001aa7e01207e7c7e01877e00c3876975757575757575757551';
 
     function buildScript(pubkeyHex) {
+      // owner = raw x-only pubkey (32 bytes)
       return PLAYER_SCRIPT_HEX.replaceAll('aa'.repeat(32), pubkeyHex);
     }
 
@@ -207,16 +208,20 @@
         lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
       });
 
-      // sig_script: <newHp> <newGold> <newLevel> <redeem>
-      // No sig/pubkey (no-sig contract), no selector (without_selector=true)
+      // Sign the tx
+      const sigHex = kaspa.createInputSignature(unsignedTx, 0, pk);
+
+      // sig_script: <sig65> <pubkey32> <newHp> <newGold> <newLevel> <redeem>
+      const pubkeyBytes = pk.toPublicKey().toXOnlyPublicKey().toString();
       const argSb = new kaspa.ScriptBuilder();
+      argSb.addData(new Uint8Array(pubkeyBytes.match(/.{2}/g).map(h => parseInt(h, 16))));
       argSb.addI64(BigInt(newHp));
       argSb.addI64(BigInt(newGold));
       argSb.addI64(BigInt(newLevel));
       const argsHex = argSb.toString();
 
       const redeemLen = currentScript.length / 2;
-      let sigScript = argsHex;
+      let sigScript = sigHex + argsHex;
       if (redeemLen <= 255) {
         sigScript += '4c' + redeemLen.toString(16).padStart(2, '0');
       } else {
