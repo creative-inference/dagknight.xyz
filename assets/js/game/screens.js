@@ -47,8 +47,7 @@ async function shopPurchase(s, price, itemName) {
 
 // ICC PvP: Player + Opponent covenants in one atomic tx
 async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
-  console.log('pvpOnChain called:', outcome, 'hp:', newPlayerHp, 'gold:', newPlayerGold);
-  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) { console.log('pvp: no wallet'); return; }
+  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
   if (s._onChainHp === undefined || s._oppHp === undefined) {
     return syncToChain(s, `PvP ${outcome}: hp=${newPlayerHp} gold=${newPlayerGold}`);
   }
@@ -58,22 +57,38 @@ async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
     const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
     const ocHp = s._onChainHp; const ocGold = s._onChainGold; const ocLevel = s._onChainLevel;
 
-    const playerAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
-    const oppAddr = Covenant.getOpponentAddress(kaspa, s._oppHp, s._oppGold);
-    let playerUtxo = playerAddr ? await Covenant.findCovenantUtxo(playerAddr) : null;
-    let oppUtxo = oppAddr ? await Covenant.findCovenantUtxo(oppAddr) : null;
-    if (!playerUtxo || !oppUtxo) {
-      await new Promise(r => setTimeout(r, 2000));
+    // Use cached outpoints for player
+    let playerUtxo = null;
+    if (s._lastPlayerTxId) {
+      const playerScript = Covenant.buildPlayerScript(pub, ocHp, ocGold, ocLevel);
+      const playerSpk = kaspa.ScriptBuilder.fromScript(playerScript).createPayToScriptHashScript();
+      playerUtxo = {
+        outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
+        utxoEntry: { amount: s._lastPlayerAmount || '10000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: playerSpk },
+      };
+    } else {
+      const playerAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
       playerUtxo = playerAddr ? await Covenant.findCovenantUtxo(playerAddr) : null;
+    }
+
+    // Use cached outpoints for opponent
+    let oppUtxo = null;
+    if (s._lastOppTxId) {
+      const oppScript = Covenant.buildOpponentScript(s._oppHp, s._oppGold);
+      const oppSpk = kaspa.ScriptBuilder.fromScript(oppScript).createPayToScriptHashScript();
+      oppUtxo = {
+        outpoint: { transactionId: s._lastOppTxId, index: s._lastOppIndex ?? 2 },
+        utxoEntry: { amount: s._lastOppAmount || '5000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: oppSpk },
+      };
+    } else {
+      const oppAddr = Covenant.getOpponentAddress(kaspa, s._oppHp, s._oppGold);
       oppUtxo = oppAddr ? await Covenant.findCovenantUtxo(oppAddr) : null;
     }
 
     if (!playerUtxo || !oppUtxo) {
-      console.log('pvp: missing UTXO after retry, falling back');
       return syncToChain(s, `PvP ${outcome}: hp=${newPlayerHp} gold=${newPlayerGold}`);
     }
 
-    // Opponent takes some damage, loses/gains gold based on outcome
     const newOppHp = outcome === 'win' ? Math.max(1, s._oppHp - 10) : s._oppHp;
     const stake = opp.level * 50;
     const newOppGold = outcome === 'win' ? Math.max(0, s._oppGold - stake) : s._oppGold + stake;
@@ -85,10 +100,13 @@ async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
       playerUtxo, oppUtxo
     );
 
+    const txId = result.transactionId || '';
     s._onChainHp = newPlayerHp; s._onChainGold = newPlayerGold; s._onChainLevel = ocLevel;
+    s._lastPlayerTxId = txId; s._lastPlayerAmount = String(BigInt(playerUtxo.utxoEntry.amount) - 10000n);
     s._oppHp = newOppHp; s._oppGold = newOppGold;
+    s._lastOppTxId = txId; s._lastOppIndex = 1; s._lastOppAmount = String(oppUtxo.utxoEntry.amount);
     GameState.save(s);
-    chainEmit('ICC: Player+Opponent', `PvP ${outcome} — atomic state update`, result.transactionId);
+    chainEmit('ICC: Player+Opponent', `PvP ${outcome} — atomic state update`, txId);
   } catch (err) {
     console.log('ICC PvP failed, falling back:', err.message);
     await syncToChain(s, `PvP ${outcome}: hp=${newPlayerHp} gold=${newPlayerGold}`);
@@ -276,7 +294,7 @@ async function screenNewGame() {
       s._lastPlayerTxId = txId; s._lastPlayerAmount = '10000000';
       s._shopGoldCollected = 0;
       s._oppHp = 50; s._oppGold = 100;
-      s._lastOppTxId = txId; s._lastOppAmount = '5000000';
+      s._lastOppTxId = txId; s._lastOppIndex = 2; s._lastOppAmount = '5000000';
       GameState.save(s);
       covSpin.stop('Player + Shop + Arena covenants created on TN12!', 't-cyan');
       E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
