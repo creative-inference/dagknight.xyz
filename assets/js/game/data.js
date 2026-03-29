@@ -109,30 +109,45 @@ function xpForNextLevel(level) {
 
 // ---------- Monsters ----------
 
+// Monster traits:
+//   tank — high HP, low attack        glass — low HP, high attack
+//   regen — heals each round           poison — deals damage over time
+//   armored — high defense              swift — chance to dodge
+//   drain — steals HP on hit            enrage — gets stronger when low HP
+
 const MONSTERS = [
   // Tier 1 (levels 1-3)
-  { name: 'Shadow Wisp',    tier: 1, hp: 12, attack: 3,  defense: 1, xp: 20,  gold: 8  },
-  { name: 'Orphan Block',   tier: 1, hp: 15, attack: 4,  defense: 2, xp: 25,  gold: 12 },
-  { name: 'Rogue Node',     tier: 1, hp: 10, attack: 5,  defense: 1, xp: 22,  gold: 10 },
-  { name: 'Stale Header',   tier: 1, hp: 18, attack: 3,  defense: 3, xp: 28,  gold: 15 },
+  { name: 'Shadow Wisp',       tier: 1, hp: 12, attack: 3,  defense: 1, xp: 20,  gold: 8,  trait: null },
+  { name: 'Orphan Block',      tier: 1, hp: 15, attack: 4,  defense: 2, xp: 25,  gold: 12, trait: null },
+  { name: 'Rogue Node',        tier: 1, hp: 10, attack: 5,  defense: 1, xp: 22,  gold: 10, trait: 'glass' },
+  { name: 'Stale Header',      tier: 1, hp: 18, attack: 3,  defense: 3, xp: 28,  gold: 15, trait: 'armored' },
+  { name: 'Dust UTXO',         tier: 1, hp: 8,  attack: 2,  defense: 0, xp: 15,  gold: 5,  trait: 'swift' },
+  { name: 'Mempool Rat',       tier: 1, hp: 14, attack: 4,  defense: 1, xp: 18,  gold: 9,  trait: null },
 
   // Tier 2 (levels 4-6)
-  { name: 'Chain Wraith',   tier: 2, hp: 30, attack: 8,  defense: 4, xp: 55,  gold: 30 },
-  { name: 'Fork Specter',   tier: 2, hp: 25, attack: 10, defense: 3, xp: 60,  gold: 35 },
-  { name: 'Sybil Knight',   tier: 2, hp: 35, attack: 7,  defense: 6, xp: 65,  gold: 40 },
-  { name: 'Nonce Golem',    tier: 2, hp: 40, attack: 6,  defense: 5, xp: 50,  gold: 25 },
+  { name: 'Chain Wraith',      tier: 2, hp: 30, attack: 8,  defense: 4, xp: 55,  gold: 30, trait: 'drain' },
+  { name: 'Fork Specter',      tier: 2, hp: 25, attack: 10, defense: 3, xp: 60,  gold: 35, trait: 'glass' },
+  { name: 'Sybil Knight',      tier: 2, hp: 35, attack: 7,  defense: 6, xp: 65,  gold: 40, trait: 'armored' },
+  { name: 'Nonce Golem',       tier: 2, hp: 40, attack: 6,  defense: 5, xp: 50,  gold: 25, trait: 'tank' },
+  { name: 'Relay Stalker',     tier: 2, hp: 22, attack: 9,  defense: 2, xp: 52,  gold: 28, trait: 'swift' },
+  { name: 'Pruned Spirit',     tier: 2, hp: 28, attack: 7,  defense: 3, xp: 48,  gold: 22, trait: 'regen' },
+  { name: 'Gas Fee Leech',     tier: 2, hp: 20, attack: 8,  defense: 2, xp: 58,  gold: 38, trait: 'drain' },
 
   // Tier 3 (levels 7-9)
-  { name: 'Double-Spend Dragon', tier: 3, hp: 55, attack: 14, defense: 7,  xp: 120, gold: 80  },
-  { name: 'Eclipse Phantom',     tier: 3, hp: 50, attack: 16, defense: 6,  xp: 130, gold: 90  },
-  { name: 'DAG Hydra',           tier: 3, hp: 65, attack: 12, defense: 9,  xp: 140, gold: 100 },
-  { name: 'Selfish Miner',       tier: 3, hp: 45, attack: 18, defense: 5,  xp: 110, gold: 70  },
+  { name: 'Double-Spend Dragon', tier: 3, hp: 55, attack: 14, defense: 7,  xp: 120, gold: 80,  trait: 'enrage' },
+  { name: 'Eclipse Phantom',     tier: 3, hp: 50, attack: 16, defense: 6,  xp: 130, gold: 90,  trait: 'swift' },
+  { name: 'DAG Hydra',           tier: 3, hp: 65, attack: 12, defense: 9,  xp: 140, gold: 100, trait: 'regen' },
+  { name: 'Selfish Miner',       tier: 3, hp: 45, attack: 18, defense: 5,  xp: 110, gold: 70,  trait: 'glass' },
+  { name: 'Timestamp Wraith',    tier: 3, hp: 58, attack: 13, defense: 8,  xp: 125, gold: 85,  trait: 'poison' },
+  { name: 'Merkle Shade',        tier: 3, hp: 52, attack: 15, defense: 6,  xp: 135, gold: 95,  trait: 'drain' },
 
   // Tier 4 (levels 10-12)
-  { name: 'The Reorg Lord',      tier: 4, hp: 80,  attack: 20, defense: 10, xp: 250, gold: 200 },
-  { name: "Nakamoto's Ghost",    tier: 4, hp: 90,  attack: 18, defense: 12, xp: 280, gold: 220 },
-  { name: 'Finality Breaker',    tier: 4, hp: 100, attack: 22, defense: 11, xp: 300, gold: 250 },
-  { name: '51% Colossus',        tier: 4, hp: 120, attack: 16, defense: 14, xp: 350, gold: 300 },
+  { name: 'The Reorg Lord',      tier: 4, hp: 80,  attack: 20, defense: 10, xp: 250, gold: 200, trait: 'enrage' },
+  { name: "Nakamoto's Ghost",    tier: 4, hp: 90,  attack: 18, defense: 12, xp: 280, gold: 220, trait: 'regen' },
+  { name: 'Finality Breaker',    tier: 4, hp: 100, attack: 22, defense: 11, xp: 300, gold: 250, trait: 'poison' },
+  { name: '51% Colossus',        tier: 4, hp: 120, attack: 16, defense: 14, xp: 350, gold: 300, trait: 'tank' },
+  { name: 'Consensus Devourer',  tier: 4, hp: 95,  attack: 24, defense: 8,  xp: 320, gold: 280, trait: 'glass' },
+  { name: 'The Halving',         tier: 4, hp: 110, attack: 19, defense: 13, xp: 340, gold: 290, trait: 'drain' },
 ];
 
 function monstersForLevel(level) {
@@ -147,7 +162,9 @@ function monstersForLevel(level) {
 
 function randomMonster(level) {
   const pool = monstersForLevel(level);
-  return { ...pool[Math.floor(Math.random() * pool.length)] };
+  const m = { ...pool[Math.floor(Math.random() * pool.length)] };
+  m.maxHp = m.hp; // track max for regen/drain caps
+  return m;
 }
 
 // ---------- Items ----------

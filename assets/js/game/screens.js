@@ -282,6 +282,15 @@ async function screenForest() {
 
   const monster = randomMonster(s.level);
   E.red(`  ★ A ${monster.name} emerges from the shadows!`);
+  if (monster.trait) {
+    const traitDesc = {
+      glass: 'Fragile but hits hard', tank: 'Slow but absorbs punishment',
+      regen: 'Regenerates HP each round', poison: 'Venomous — deals damage over time',
+      armored: 'Heavy armor reduces damage', swift: 'Quick — may dodge attacks',
+      drain: 'Steals your life force', enrage: 'Gets stronger when wounded',
+    };
+    E.dim(`  [${monster.trait.toUpperCase()}] ${traitDesc[monster.trait] || ''}`);
+  }
   E.blank();
   E.line(`  HP: ${monster.hp}  ATK: ${monster.attack}  DEF: ${monster.defense}`);
   E.blank();
@@ -367,25 +376,59 @@ async function screenCombat(monster) {
 
     if (choice === 'A' || choice === 'D') {
       const atkMult = choice === 'D' ? 0.5 : 1;
-      const result = runCombatRound(
-        { name: s.name, attack: Math.floor(s.attack * atkMult), weapon: s.weapon, defense: s.defense, armor: s.armor },
-        { name: monster.name, attack: monster.attack, weapon: { bonus: 0 }, defense: monster.defense, armor: { bonus: 0 }, hp: monster.hp }
-      );
-      monster.hp = result.defenderHp;
-      if (choice === 'D') {
-        log.push({ fn: E.cyan.bind(E), text: `  You brace and counter for ${result.damage} damage!` });
+
+      // Swift: chance to dodge player's attack
+      if (monster.trait === 'swift' && Math.random() < 0.25) {
+        log.push({ fn: E.dim.bind(E), text: `  The ${monster.name} dodges your attack!` });
       } else {
-        log.push({ fn: E.gold.bind(E), text: `  You strike the ${monster.name} for ${result.damage} damage!` });
+        const result = runCombatRound(
+          { name: s.name, attack: Math.floor(s.attack * atkMult), weapon: s.weapon, defense: s.defense, armor: s.armor },
+          { name: monster.name, attack: monster.attack, weapon: { bonus: 0 }, defense: monster.defense, armor: { bonus: 0 }, hp: monster.hp }
+        );
+        monster.hp = result.defenderHp;
+        if (choice === 'D') {
+          log.push({ fn: E.cyan.bind(E), text: `  You brace and counter for ${result.damage} damage!` });
+        } else {
+          log.push({ fn: E.gold.bind(E), text: `  You strike the ${monster.name} for ${result.damage} damage!` });
+        }
+        chainEmit('Game::combat', `Player → ${monster.name} | -${result.damage} HP (ZK coming soon)`);
       }
-      chainEmit('Game::combat', `Player → ${monster.name} | -${result.damage} HP (ZK coming soon)`);
+    }
+
+    // Monster trait effects (pre-attack)
+    if (monster.hp > 0 && monster.trait === 'regen') {
+      const regen = Math.floor(monster.maxHp * 0.08);
+      monster.hp = Math.min(monster.maxHp, monster.hp + regen);
+      log.push({ fn: E.dim.bind(E), text: `  The ${monster.name} regenerates ${regen} HP.` });
+    }
+    if (monster.hp > 0 && monster.trait === 'enrage' && monster.hp < monster.maxHp * 0.4) {
+      if (!monster._enraged) {
+        monster._enraged = true;
+        monster.attack = Math.floor(monster.attack * 1.5);
+        log.push({ fn: E.red.bind(E), text: `  The ${monster.name} is ENRAGED! Attack increased!` });
+      }
     }
 
     // Monster attacks back if alive
     if (monster.hp > 0 && choice !== 'R') {
       let defMult = choice === 'D' ? 0.5 : 1;
-      const mDmg = Math.max(1, Math.floor(rollDamage(monster.attack, 0, s.defense, s.armor.bonus) * defMult));
+      let monsterAtk = monster.attack;
+      const mDmg = Math.max(1, Math.floor(rollDamage(monsterAtk, 0, s.defense, s.armor.bonus) * defMult));
       s.hp = Math.max(0, s.hp - mDmg);
       log.push({ fn: E.red.bind(E), text: `  ${monster.name} hits you for ${mDmg} damage!` });
+
+      // Drain: monster heals for portion of damage dealt
+      if (monster.trait === 'drain') {
+        const drained = Math.floor(mDmg * 0.3);
+        monster.hp = Math.min(monster.maxHp, monster.hp + drained);
+        log.push({ fn: E.dim.bind(E), text: `  The ${monster.name} drains ${drained} HP from you!` });
+      }
+      // Poison: lingering damage
+      if (monster.trait === 'poison') {
+        const poisonDmg = Math.max(1, Math.floor(s.maxHp * 0.05));
+        s.hp = Math.max(0, s.hp - poisonDmg);
+        log.push({ fn: E.dim.bind(E), text: `  Poison courses through you... ${poisonDmg} damage!` });
+      }
     }
   }
 
