@@ -720,7 +720,7 @@ async function screenInn() {
         E.blank();
         const result = event.effect(s);
         GameState.save(s);
-        E[result.color]?.(result.msg) || E.line(result.msg);
+        if (E[result.color]) E[result.color](result.msg); else E.line(result.msg);
         if (result.color === 'gold' || result.color === 'cyan') {
           await syncToChain(s, `Tavern: ${result.msg.trim()}`);
         }
