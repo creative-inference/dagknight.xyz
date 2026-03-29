@@ -365,13 +365,18 @@ async function screenCombat(monster) {
       log.push({ fn: E.cyan.bind(E), text: `  You drink a potion and restore ${heal} HP.` });
     }
 
-    if (choice === 'A') {
+    if (choice === 'A' || choice === 'D') {
+      const atkMult = choice === 'D' ? 0.5 : 1;
       const result = runCombatRound(
-        { name: s.name, attack: s.attack, weapon: s.weapon, defense: s.defense, armor: s.armor },
+        { name: s.name, attack: Math.floor(s.attack * atkMult), weapon: s.weapon, defense: s.defense, armor: s.armor },
         { name: monster.name, attack: monster.attack, weapon: { bonus: 0 }, defense: monster.defense, armor: { bonus: 0 }, hp: monster.hp }
       );
       monster.hp = result.defenderHp;
-      log.push({ fn: E.gold.bind(E), text: `  You strike the ${monster.name} for ${result.damage} damage!` });
+      if (choice === 'D') {
+        log.push({ fn: E.cyan.bind(E), text: `  You brace and counter for ${result.damage} damage!` });
+      } else {
+        log.push({ fn: E.gold.bind(E), text: `  You strike the ${monster.name} for ${result.damage} damage!` });
+      }
       chainEmit('Game::combat', `Player → ${monster.name} | -${result.damage} HP (ZK coming soon)`);
     }
 
