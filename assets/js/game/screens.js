@@ -195,9 +195,9 @@ async function screenTitle() {
             s._onChainLevel = chainState.level;
             s._lastCovenantAddr = chainState.address;
             GameState.save(s);
-            E.dim(`  State loaded from TN12: hp=${chainState.hp} gold=${chainState.gold} level=${chainState.level}`);
+            chainEmit('Player::chain_load', `State restored from TN12: hp=${chainState.hp} gold=${chainState.gold} level=${chainState.level}`, false);
           } else {
-            E.dim(`  Covenant verified on TN12 (${chainState.amount} sompi)`);
+            chainEmit('Player::verified', `Covenant verified on TN12 (${chainState.amount} sompi)`, false);
           }
         }
       }
