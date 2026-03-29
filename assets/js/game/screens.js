@@ -192,27 +192,16 @@ async function screenNewGame() {
         utxos = await Covenant.getUtxos(Wallet.address);
         retries++;
       }
-      const result = await Covenant.createPlayerUtxo(
+      const result = await Covenant.createPlayerAndShop(
         kaspa, pk, pubkeyHex, s.hp, s.gold, 1, utxos
       );
       const txId = result.transactionId || '';
-      // Track on-chain state
       s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = 1;
-      covSpin.stop('Player covenant UTXO created on TN12!', 't-cyan');
-      E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
-      chainEmit('Player::create', `Covenant UTXO — ${s.name} the ${CLASSES[classKey].name}`, txId);
-
-      // Deploy Shop covenant
-      try {
-        const shopUtxos = await Covenant.getUtxos(Wallet.address);
-        const shopResult = await Covenant.createShopUtxo(kaspa, pk, 0, shopUtxos);
-        s._shopGoldCollected = 0;
-        E.dim(`  Shop deployed: ${(shopResult.transactionId || '').substring(0, 24)}...`);
-        chainEmit('Shop::create', 'Hash Bazaar covenant UTXO deployed', shopResult.transactionId);
-      } catch (shopErr) {
-        E.dim(`  Shop deployment skipped: ${shopErr.message.substring(0, 40)}`);
-      }
+      s._shopGoldCollected = 0;
       GameState.save(s);
+      covSpin.stop('Player + Shop covenants created on TN12!', 't-cyan');
+      E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
+      chainEmit('Player::create', `Player + Shop covenants deployed`, txId);
     } catch (err) {
       covSpin.stop(`Covenant creation skipped: ${err.message}`, 't-dim');
       chainEmit('Player::create (sim)', `${window._state.name} — localStorage only`);

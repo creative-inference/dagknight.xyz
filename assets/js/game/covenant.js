@@ -132,6 +132,46 @@ const Covenant = {
     return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
   },
 
+  // Deploy Player + Shop covenants in a single transaction
+  async createPlayerAndShop(kaspa, privateKey, pubkeyHex, hp, gold, level, fundingUtxos) {
+    const playerScript = this.buildPlayerScript(pubkeyHex, hp, gold, level);
+    const playerSpk = kaspa.ScriptBuilder.fromScript(playerScript).createPayToScriptHashScript();
+    const shopScript = this.buildShopScript(0);
+    const shopSpk = kaspa.ScriptBuilder.fromScript(shopScript).createPayToScriptHashScript();
+    const changeSpk = kaspa.payToAddressScript(privateKey.toAddress('testnet-12'));
+
+    const inputs = fundingUtxos.filter(u => BigInt(u.utxoEntry?.amount || 0) > 0n).map(u => {
+      const outpoint = { transactionId: u.outpoint.transactionId, index: u.outpoint.index };
+      return {
+        previousOutpoint: outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+        utxo: { outpoint, amount: BigInt(u.utxoEntry.amount), scriptPublicKey: changeSpk, blockDaaScore: BigInt(u.utxoEntry.blockDaaScore || 0), isCoinbase: false },
+      };
+    });
+
+    let totalInput = 0n;
+    for (const inp of inputs) totalInput += inp.utxo.amount;
+    const playerValue = 10000000n;
+    const shopValue = 5000000n;
+    const fee = 10000n;
+    if (totalInput < playerValue + shopValue + fee) throw new Error('Insufficient funds');
+    const change = totalInput - playerValue - shopValue - fee;
+
+    const outputs = [
+      { value: playerValue, scriptPublicKey: playerSpk },
+      { value: shopValue, scriptPublicKey: shopSpk },
+    ];
+    if (change > 0n) outputs.push({ value: change, scriptPublicKey: changeSpk });
+
+    const tx = new kaspa.Transaction({
+      version: 0, inputs, outputs,
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const signedTx = kaspa.signTransaction(tx, [privateKey], false);
+    const rpc = await this.ensureRpc(kaspa);
+    return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+  },
+
   // ICC: Player buys from Shop — atomic tx with both covenants
   // Input 0: Player covenant, Input 1: Shop covenant
   // Output 0: New Player (gold decreased), Output 1: New Shop (gold_collected increased)
