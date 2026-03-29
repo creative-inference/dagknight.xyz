@@ -45,6 +45,49 @@ async function shopPurchase(s, price, itemName) {
   }
 }
 
+// ICC PvP: Player + Opponent covenants in one atomic tx
+async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
+  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
+  if (s._onChainHp === undefined || s._oppHp === undefined) {
+    return syncToChain(s, `PvP ${outcome}: hp=${newPlayerHp} gold=${newPlayerGold}`);
+  }
+  try {
+    const kaspa = Wallet._kaspa;
+    const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+    const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+    const ocHp = s._onChainHp; const ocGold = s._onChainGold; const ocLevel = s._onChainLevel;
+
+    const playerAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
+    const oppAddr = Covenant.getOpponentAddress(kaspa, s._oppHp, s._oppGold);
+    const playerUtxo = playerAddr ? await Covenant.findCovenantUtxo(playerAddr) : null;
+    const oppUtxo = oppAddr ? await Covenant.findCovenantUtxo(oppAddr) : null;
+
+    if (!playerUtxo || !oppUtxo) {
+      return syncToChain(s, `PvP ${outcome}: hp=${newPlayerHp} gold=${newPlayerGold}`);
+    }
+
+    // Opponent takes some damage, loses/gains gold based on outcome
+    const newOppHp = outcome === 'win' ? Math.max(1, s._oppHp - 10) : s._oppHp;
+    const stake = opp.level * 50;
+    const newOppGold = outcome === 'win' ? Math.max(0, s._oppGold - stake) : s._oppGold + stake;
+
+    const result = await Covenant.pvpFight(
+      kaspa, pk, pub, ocHp, ocGold, ocLevel,
+      newPlayerHp, newPlayerGold,
+      s._oppHp, s._oppGold, newOppHp, newOppGold,
+      playerUtxo, oppUtxo
+    );
+
+    s._onChainHp = newPlayerHp; s._onChainGold = newPlayerGold; s._onChainLevel = ocLevel;
+    s._oppHp = newOppHp; s._oppGold = newOppGold;
+    GameState.save(s);
+    chainEmit('ICC: Player+Opponent', `PvP ${outcome} — atomic state update`, result.transactionId);
+  } catch (err) {
+    console.log('ICC PvP failed, falling back:', err.message);
+    await syncToChain(s, `PvP ${outcome}: hp=${newPlayerHp} gold=${newPlayerGold}`);
+  }
+}
+
 // Sync game state to on-chain covenant UTXO
 async function syncToChain(s, action) {
   if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
@@ -198,8 +241,9 @@ async function screenNewGame() {
       const txId = result.transactionId || '';
       s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = 1;
       s._shopGoldCollected = 0;
+      s._oppHp = 50; s._oppGold = 100;
       GameState.save(s);
-      covSpin.stop('Player + Shop covenants created on TN12!', 't-cyan');
+      covSpin.stop('Player + Shop + Arena covenants created on TN12!', 't-cyan');
       E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
       chainEmit('Player::create', `Player + Shop covenants deployed`, txId);
     } catch (err) {
@@ -848,7 +892,7 @@ async function screenPvP() {
     E.red('  Defeated in the arena!');
     s.hp = Math.max(1, Math.floor(s.maxHp * 0.1));
     GameState.save(s);
-    await syncToChain(s, `PvP loss: hp=${s.hp}`);
+    await pvpOnChain(s, s.hp, s.gold, opp, 'loss');
     await E.pause();
     await screenTown();
   } else {
@@ -859,7 +903,7 @@ async function screenPvP() {
     GameState.checkLevelUp(s);
     GameState.save(s);
     E.gold(`  ★ ${opp.name} falls! +${reward} gold, +${opp.level * 30} XP`);
-    await syncToChain(s, `PvP win: +${reward}g, gold=${s.gold}`);
+    await pvpOnChain(s, s.hp, s.gold, opp, 'win');
     await E.pause();
     await screenTown();
   }
