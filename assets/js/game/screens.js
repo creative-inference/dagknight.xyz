@@ -591,30 +591,138 @@ async function screenShop() {
 }
 
 // ----- Inn -----
+
+const TAVERN_RUMORS = [
+  { speaker: 'A grizzled miner', lines: [
+    '"I heard the Selfish Miner hoards blocks in a private chain."',
+    '"Waits until he has enough, then releases them all at once."',
+    '"The DAG makes it harder, but not impossible..."',
+  ]},
+  { speaker: 'A nervous merchant', lines: [
+    '"The Double-Spend Dragon? Oh, it is real."',
+    '"It attacks two targets at once with the same breath."',
+    '"Only the DAGKnight protocol can stop it."',
+  ]},
+  { speaker: 'An old node operator', lines: [
+    '"Back in my day, we had one block per second."',
+    '"Now it is ten. Soon thirty-two."',
+    '"The Merkle Forest grows faster than anyone can prune it."',
+  ]},
+  { speaker: 'A hooded figure', lines: [
+    '"Every UTXO in this realm carries a covenant."',
+    '"The covenants enforce the rules. Not the king. Not the sysop."',
+    '"Just math. Pure, beautiful, trustless math."',
+  ]},
+  { speaker: 'A travelling bard', lines: [
+    '"They say Nakamoto\'s Ghost wanders the highest tiers."',
+    '"It guards the original genesis block."',
+    '"No one has defeated it and lived to tell... well, except those who have."',
+  ]},
+  { speaker: 'A drunk validator', lines: [
+    '"You know what ICC stands for? Inter-Covenant Communication!"',
+    '"Two covenants, one transaction, zero trust."',
+    '"I once saw a knight buy a sword and slay a dragon in the same block."',
+  ]},
+  { speaker: 'A quiet scribe', lines: [
+    '"The Hash Bazaar merchant? His shop is a covenant too."',
+    '"Every purchase is an atomic transaction."',
+    '"He cannot cheat you. The L1 forbids it."',
+  ]},
+  { speaker: 'A wide-eyed apprentice', lines: [
+    '"I tried to set my gold to a million. The covenant rejected it!"',
+    '"require(newGold >= 0), it said."',
+    '"The blockchain does not negotiate."',
+  ]},
+  { speaker: 'A scarred knight', lines: [
+    '"The 51% Colossus is the final test."',
+    '"One hundred and twenty hit points. Fourteen defense."',
+    '"You will need every potion and every prayer to the DAG."',
+  ]},
+  { speaker: 'A fork philosopher', lines: [
+    '"In the old world, games needed servers."',
+    '"In this world, the BlockDAG is the server."',
+    '"Your character sheet is a UTXO. Your sword is a state transition."',
+  ]},
+];
+
+const TAVERN_EVENTS = [
+  { text: 'A stranger challenges you to arm wrestling!', effect: (s) => {
+    if (Math.random() < 0.5) {
+      const gold = Math.floor(5 + s.level * 3);
+      s.gold += gold;
+      return { msg: `  You win! +${gold} gold.`, color: 'gold' };
+    }
+    return { msg: '  You lose. Your pride takes the hit, not your wallet.', color: 'dim' };
+  }},
+  { text: 'The barkeep offers you a mysterious brew...', effect: (s) => {
+    const roll = Math.random();
+    if (roll < 0.4) {
+      const heal = Math.floor(s.maxHp * 0.2);
+      s.hp = Math.min(s.maxHp, s.hp + heal);
+      return { msg: `  It heals you! +${heal} HP.`, color: 'cyan' };
+    } else if (roll < 0.7) {
+      return { msg: '  It tastes terrible but does nothing.', color: 'dim' };
+    }
+    const dmg = Math.floor(s.maxHp * 0.1);
+    s.hp = Math.max(1, s.hp - dmg);
+    return { msg: `  It burns! -${dmg} HP. Never trust free drinks.`, color: 'red' };
+  }},
+  { text: 'You find a coin purse under the table!', effect: (s) => {
+    const gold = Math.floor(10 + Math.random() * s.level * 5);
+    s.gold += gold;
+    return { msg: `  +${gold} gold! Finders keepers.`, color: 'gold' };
+  }},
+  { text: 'A bard plays a song about your deeds in the forest.', effect: (s) => {
+    const xp = Math.floor(5 + s.level * 2);
+    s.xp += xp;
+    return { msg: `  You feel inspired. +${xp} XP.`, color: 'cyan' };
+  }},
+];
+
 async function screenInn() {
   const s = window._state;
   const cost = INN_BASE_PRICE + (s.level * 10);
   E.clear();
   E.gold('  === THE CONSENSUS TAVERN ===');
   E.blank();
-  E.dim('  "Rest here, knight. Let your state');
-  E.dim('   synchronize with the network."');
+  E.dim('  The fire crackles. Miners and validators');
+  E.dim('  huddle over tankards of hashed ale.');
   E.blank();
   E.line(`  HP: ${s.hp}/${s.maxHp}  |  Gold: ${s.gold}`);
-  E.line(`  Full rest costs ${cost} gold.`);
   E.blank();
 
-  if (s.hp >= s.maxHp) {
-    E.dim('  You are already at full health.');
+  const opts = [];
+  if (s.hp < s.maxHp) opts.push({ key: 'R', label: `Rest (${cost}g - full HP)` });
+  opts.push({ key: 'T', label: 'Talk to someone' });
+  opts.push({ key: 'B', label: 'Back to Town' });
+
+  const choice = await E.menu(opts);
+
+  if (choice === 'T') {
+    E.blank();
+    // 70% rumor, 30% event
+    if (Math.random() < 0.7) {
+      const rumor = TAVERN_RUMORS[Math.floor(Math.random() * TAVERN_RUMORS.length)];
+      E.line(`  ${rumor.speaker} leans in:`);
+      E.blank();
+      for (const line of rumor.lines) {
+        E.dim(`  ${line}`);
+      }
+    } else {
+      const event = TAVERN_EVENTS[Math.floor(Math.random() * TAVERN_EVENTS.length)];
+      E.line(`  ${event.text}`);
+      E.blank();
+      const result = event.effect(s);
+      GameState.save(s);
+      E[result.color]?.(result.msg) || E.line(result.msg);
+      if (result.color === 'gold' || result.color === 'cyan') {
+        await syncToChain(s, `Tavern: ${result.msg.trim()}`);
+      }
+    }
     await E.pause();
-    await screenTown();
+    await screenInn();
     return;
   }
-
-  const choice = await E.menu([
-    { key: 'R', label: `Rest (${cost}g - full HP)` },
-    { key: 'B', label: 'Back to Town' },
-  ]);
 
   if (choice === 'R') {
     if (s.gold >= cost) {
