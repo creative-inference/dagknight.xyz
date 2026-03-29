@@ -13,14 +13,6 @@ const E = {
     this._output = document.getElementById('terminal-output');
     this._input = document.getElementById('terminal-input');
     this._field = document.getElementById('input-field');
-    // MAINTENANCE: disable game during node upgrade (remove when done)
-    this._output.innerHTML = '<div style="color:#d4a847;padding:2rem;text-align:center;font-size:1.1rem;line-height:2;">' +
-      '=== TN12 NODE UPGRADE IN PROGRESS ===<br><br>' +
-      'Upgrading to KIP-21 protocol v9 for covenant transaction relay.<br>' +
-      'New games temporarily unavailable.<br><br>' +
-      'The DAG Gate will return shortly.</div>';
-    this._input.style.display = 'none';
-    return; // block game from starting
     Wallet.init();
     screenTitle();
   },
