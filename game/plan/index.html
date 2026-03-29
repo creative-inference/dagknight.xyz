@@ -55,107 +55,80 @@ GitHub Pages (static)          TN12 Node
     <!-- Phase 1 -->
     <h2 class="section-title">Phase 1: <span class="teal">Live TN12 Connection (Done)</span></h2>
     <p style="color: var(--text); margin-bottom: 1.5rem;">
-      The chain activity log now shows real blocks from Kaspa Testnet-12 via the public REST API.
+      Browser connects directly to our TN12 node via wRPC WebSocket. All covenant operations
+      &mdash; UTXO lookups, transaction submission, block info &mdash; go through wRPC.
     </p>
 
     <div class="pillars" style="margin-bottom: 1rem;">
       <div class="pillar-card">
         <div class="pillar-icon">&#x2705;</div>
-        <h3>Live Block Feed</h3>
+        <h3>Own TN12 Node</h3>
         <p>
-          Connected to <code>api-tn12.kaspa.org</code> REST API.
-          Polls <code>/info/blockdag</code> for real DAA scores, tip hashes, and block deltas
-          from <strong>kaspa-testnet-12</strong>. Green pulsing indicator shows live status.
-          Falls back to simulated data if API is unreachable.
+          Running <code>kaspad</code> from the <code>tn12</code> branch on a DigitalOcean droplet.
+          wRPC JSON endpoint at <code>ws://157.245.8.28:18310</code>.
+          Fully synced, accepting covenant transactions that public APIs reject as "non-standard".
         </p>
       </div>
       <div class="pillar-card">
         <div class="pillar-icon">&#x2705;</div>
         <h3>Browser Tx Construction</h3>
         <p>
-          Proven working with <code>@kasdk/web</code> (v0.15.2).
+          <code>@kasdk/web</code> WASM SDK runs in browser.
           <code>PrivateKey</code>, <code>ScriptBuilder</code>, <code>Transaction</code>,
-          and <code>TransactionOutput</code> all work in browser.
-          Custom scripts can be built and submitted via
-          <code>POST /transactions</code> to the TN12 REST API.
+          <code>createInputSignature</code> (Schnorr) all proven.
+          Custom covenant scripts built and submitted via wRPC.
         </p>
       </div>
       <div class="pillar-card">
         <div class="pillar-icon">&#x2705;</div>
-        <h3>No Backend Needed</h3>
+        <h3>No Backend Server</h3>
         <p>
-          TN12 is not in the public wRPC Resolver, but the REST API at
-          <code>api-tn12.kaspa.org</code> provides full access: block info,
-          UTXO queries, balance checks, and transaction submission.
-          Static site + REST API = complete stack.
+          Static site on GitHub Pages. Browser connects to TN12 node via WebSocket.
+          Only infrastructure: the node itself and a Cloud Function faucet for onboarding.
+          The BlockDAG is the server.
         </p>
       </div>
     </div>
 
-    <div class="game-tech-note" style="margin-bottom: 2rem;">
-      <h3>Confirmed Pipeline</h3>
-      <div class="tech-grid">
-        <div class="tech-row">
-          <span class="tech-game">SilverScript</span>
-          <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain"><code>player.sil</code> compiled to 172-byte P2SH script via <code>silverc</code> &mdash; PROVEN</span>
-        </div>
-        <div class="tech-row">
-          <span class="tech-game">ScriptBuilder</span>
-          <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain"><code>ScriptBuilder.fromScript(hex)</code> + <code>createPayToScriptHashScript()</code> &mdash; PROVEN</span>
-        </div>
-        <div class="tech-row">
-          <span class="tech-game">Transaction</span>
-          <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Assemble with custom script outputs &mdash; PROVEN</span>
-        </div>
-        <div class="tech-row">
-          <span class="tech-game">Submit</span>
-          <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain"><code>POST api-tn12.kaspa.org/transactions</code> &mdash; PROVEN</span>
-        </div>
-        <div class="tech-row">
-          <span class="tech-game">Read State</span>
-          <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain"><code>GET /addresses/{addr}/utxos</code> to decode covenant UTXO &mdash; PROVEN</span>
-        </div>
-      </div>
-    </div>
-
     <!-- Phase 2 -->
-    <h2 class="section-title" style="margin-top: 2.5rem;">Phase 2: <span class="gold">On-Chain Game State</span> <span class="teal">(In Progress)</span></h2>
+    <h2 class="section-title" style="margin-top: 2.5rem;">Phase 2: <span class="teal">On-Chain Game State (Done)</span></h2>
     <p style="color: var(--text); margin-bottom: 1.5rem;">
-      Game state is moving from localStorage to covenant UTXOs. The browser builds and submits real transactions.
+      Character state lives on-chain as a covenant-enforced UTXO. The browser builds, signs, and submits
+      real covenant transactions through our TN12 node. Game rules are enforced by the L1.
     </p>
 
     <div class="game-tech-note" style="margin-bottom: 2rem;">
-      <h3>Phase 2 Progress</h3>
+      <h3>Proven On-Chain</h3>
       <div class="tech-grid">
         <div class="tech-row">
-          <span class="tech-game" style="color: var(--primary);">&#x2705; Compiler</span>
+          <span class="tech-game" style="color: var(--primary);">&#x2705; SilverScript</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain"><code>player.sil</code> compiled to 172-byte bytecode with SilverScript compiler</span>
+          <span class="tech-chain"><code>player.sil</code> compiled to 160-byte bytecode &mdash; single entrypoint, <code>checkSig</code> + <code>validateOutputState</code></span>
         </div>
         <div class="tech-row">
           <span class="tech-game" style="color: var(--primary);">&#x2705; Fund Players</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Cloud Function faucet sends 1 KAS to new players automatically</span>
+          <span class="tech-chain">Cloud Function faucet sends 1 KAS to new players via signed TN12 transaction</span>
         </div>
         <div class="tech-row">
           <span class="tech-game" style="color: var(--primary);">&#x2705; Create Covenant</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Player covenant UTXO created on TN12 via P2SH from browser &mdash; confirmed on-chain</span>
+          <span class="tech-chain">Player covenant UTXO deployed on TN12 via P2SH &mdash; wRPC submission bypasses standardness check</span>
         </div>
         <div class="tech-row">
-          <span class="tech-game">State Read</span>
+          <span class="tech-game" style="color: var(--primary);">&#x2705; State Transition</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Wire <code>state.js</code> to decode Player UTXO instead of localStorage</span>
+          <span class="tech-chain">Covenant spent + recreated with new state (hp, gold, level) &mdash; <code>validateOutputState</code> verified on-chain</span>
         </div>
         <div class="tech-row">
-          <span class="tech-game">State Write</span>
+          <span class="tech-game" style="color: var(--primary);">&#x2705; Owner Signature</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Each game action builds + submits a covenant spend tx</span>
+          <span class="tech-chain">Schnorr <code>checkSig</code> verifies only the owner can update their character &mdash; proven on TN12</span>
+        </div>
+        <div class="tech-row">
+          <span class="tech-game" style="color: var(--primary);">&#x2705; Game Integration</span>
+          <span class="tech-arrow">&rarr;</span>
+          <span class="tech-chain">Level-up during gameplay triggers on-chain covenant state update automatically</span>
         </div>
       </div>
     </div>
@@ -164,17 +137,18 @@ GitHub Pages (static)          TN12 Node
 
     <div class="pillars" style="margin-bottom: 1rem;">
       <div class="pillar-card">
-        <div class="pillar-icon">&#x1F6E1;</div>
-        <h3>player.ss</h3>
+        <div class="pillar-icon">&#x2705;</div>
+        <h3>player.sil (LIVE)</h3>
         <p>
-          <strong>Self-preserving UTXO.</strong> Holds character state: name, class, level, XP, HP,
-          stats, gold, equipment. Every spend recreates the UTXO with updated state.
-          Auth-bound to player's pubkey.
+          <strong>Self-preserving UTXO.</strong> 160 bytes compiled from SilverScript.
+          Holds owner pubkey, HP, gold, level. Every spend recreates the UTXO with updated state.
+          Owner-signed via Schnorr <code>checkSig</code>. State validated via <code>validateOutputState</code>.
+          Game rules enforced on L1: <code>require(newLevel >= level)</code>.
         </p>
       </div>
       <div class="pillar-card">
-        <div class="pillar-icon">&#x2694;</div>
-        <h3>game.ss</h3>
+        <div class="pillar-icon">&#x1F3AF;</div>
+        <h3>game.sil (Next)</h3>
         <p>
           <strong>Episodic covenant.</strong> Created when entering the forest, consumed when combat
           resolves. ICC with Player covenant in a single atomic transaction.
@@ -185,7 +159,7 @@ GitHub Pages (static)          TN12 Node
     <div class="pillars" style="margin-bottom: 2rem;">
       <div class="pillar-card">
         <div class="pillar-icon">&#x1F3EA;</div>
-        <h3>shop.ss</h3>
+        <h3>shop.sil (Next)</h3>
         <p>
           <strong>Persistent shared state.</strong> Holds inventory and prices.
           ICC with Player covenant: atomic tx validates gold transfer + item grant.
@@ -194,10 +168,10 @@ GitHub Pages (static)          TN12 Node
       </div>
       <div class="pillar-card">
         <div class="pillar-icon">&#x1F3DF;</div>
-        <h3>arena.ss</h3>
+        <h3>arena.sil (Next)</h3>
         <p>
           <strong>PvP with staked KAS.</strong> Two Player covenant inputs + Arena covenant.
-          Timeout via <code>this.age &gt; 300</code> (5 min per turn).
+          Timeout via <code>this.age</code> introspection.
           Winner gets the pot.
         </p>
       </div>

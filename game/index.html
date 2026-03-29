@@ -93,10 +93,14 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
       </div>
     </div>
 
-    <p style="text-align: center; color: var(--text-dim); margin-top: 2.5rem; font-style: italic;">
-      Phase 1 below runs client-side as a playable demo.<br>
-      Phase 2 will put every state transition on Kaspa's BlockDAG.
-    </p>
+    <div class="game-tech-note" style="margin-top: 2.5rem;">
+      <h3>Status: On-Chain State Transitions LIVE on TN12</h3>
+      <p style="color: var(--text); margin-bottom: 0.5rem;">
+        Character creation deploys a <strong>160-byte SilverScript covenant</strong> on Kaspa Testnet-12.
+        Level-ups trigger real <code>validateOutputState</code> transactions &mdash; owner-signed with Schnorr,
+        state-validated by the L1. No backend. Browser talks to our TN12 node via wRPC WebSocket.
+      </p>
+    </div>
     <p style="text-align: center; margin-top: 1rem;">
       <a href="{{ '/game/innovation/' | relative_url }}" style="color: var(--primary); text-decoration: none; font-family: var(--font-mono); font-size: 0.9rem;">
         The Covenant Forge &mdash; how the magic works &rarr;
