@@ -899,6 +899,8 @@ async function screenPvP() {
     if (ch === 'R') {
       E.clear();
       E.dim('  You forfeit the match.');
+      GameState.save(s);
+      await syncToChain(s, `PvP forfeit: hp=${s.hp} gold=${s.gold}`);
       await E.pause();
       await screenTown();
       return;
