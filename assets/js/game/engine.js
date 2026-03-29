@@ -13,11 +13,6 @@ const E = {
     this._output = document.getElementById('terminal-output');
     this._input = document.getElementById('terminal-input');
     this._field = document.getElementById('input-field');
-    // Maintenance banner (remove when node upgrade complete)
-    this.gold('  === TN12 NODE UPGRADE IN PROGRESS ===');
-    this.dim('  Upgrading to covpp-reset2 branch (covenant relay fix).');
-    this.dim('  New games temporarily unavailable. Back shortly.');
-    this.line('');
     Wallet.init();
     screenTitle();
   },
