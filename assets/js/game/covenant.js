@@ -6,7 +6,7 @@
    validateOutputState. Owner = raw x-only pubkey.
    ============================================================ */
 
-const COVENANT_NODE_WS = 'ws://157.245.8.28:18310';
+const COVENANT_NODE_WS = 'wss://tn12.dagknight.xyz';
 
 // Compiled Player covenant (160 bytes, without_selector=true)
 const PLAYER_SCRIPT_HEX = '20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa08140000000000000008000000000000000008010000000000000057795479876958795879ac69567900a269557900a269547978a269537901207c7e577958cd587c7e577958cd587c7e577958cd587c7e7e7e7eb976c97602a00094013c937cbc7eaa02000001aa7e01207e7c7e01877e00c3876975757575757575757551';
