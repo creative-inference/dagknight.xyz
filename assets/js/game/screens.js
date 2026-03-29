@@ -681,50 +681,55 @@ const TAVERN_EVENTS = [
 
 async function screenInn() {
   const s = window._state;
-  const cost = INN_BASE_PRICE + (s.level * 10);
-  E.clear();
-  E.gold('  === THE CONSENSUS TAVERN ===');
-  E.blank();
-  E.dim('  The fire crackles. Miners and validators');
-  E.dim('  huddle over tankards of hashed ale.');
-  E.blank();
-  E.line(`  HP: ${s.hp}/${s.maxHp}  |  Gold: ${s.gold}`);
-  E.blank();
 
-  const opts = [];
-  if (s.hp < s.maxHp) opts.push({ key: 'R', label: `Rest (${cost}g - full HP)` });
-  opts.push({ key: 'T', label: 'Talk to someone' });
-  opts.push({ key: 'B', label: 'Back to Town' });
-
-  const choice = await E.menu(opts);
-
-  if (choice === 'T') {
+  while (true) {
+    const cost = INN_BASE_PRICE + (s.level * 10);
+    E.clear();
+    E.gold('  === THE CONSENSUS TAVERN ===');
     E.blank();
-    // 70% rumor, 30% event
-    if (Math.random() < 0.7) {
-      const rumor = TAVERN_RUMORS[Math.floor(Math.random() * TAVERN_RUMORS.length)];
-      E.line(`  ${rumor.speaker} leans in:`);
-      E.blank();
-      for (const line of rumor.lines) {
-        E.dim(`  ${line}`);
-      }
-    } else {
-      const event = TAVERN_EVENTS[Math.floor(Math.random() * TAVERN_EVENTS.length)];
-      E.line(`  ${event.text}`);
-      E.blank();
-      const result = event.effect(s);
-      GameState.save(s);
-      E[result.color]?.(result.msg) || E.line(result.msg);
-      if (result.color === 'gold' || result.color === 'cyan') {
-        await syncToChain(s, `Tavern: ${result.msg.trim()}`);
-      }
-    }
-    await E.pause();
-    await screenInn();
-    return;
-  }
+    E.dim('  The fire crackles. Miners and validators');
+    E.dim('  huddle over tankards of hashed ale.');
+    E.blank();
+    E.line(`  HP: ${s.hp}/${s.maxHp}  |  Gold: ${s.gold}`);
+    E.blank();
 
-  if (choice === 'R') {
+    const opts = [];
+    if (s.hp < s.maxHp) opts.push({ key: 'R', label: `Rest (${cost}g - full HP)` });
+    opts.push({ key: 'T', label: 'Talk to someone' });
+    opts.push({ key: 'B', label: 'Back to Town' });
+
+    const choice = await E.menu(opts);
+
+    if (choice === 'B') break;
+
+    if (choice === 'T') {
+      E.clear();
+      E.gold('  === THE CONSENSUS TAVERN ===');
+      E.blank();
+      // 70% rumor, 30% event
+      if (Math.random() < 0.7) {
+        const rumor = TAVERN_RUMORS[Math.floor(Math.random() * TAVERN_RUMORS.length)];
+        E.line(`  ${rumor.speaker} leans in:`);
+        E.blank();
+        for (const line of rumor.lines) {
+          E.dim(`  ${line}`);
+        }
+      } else {
+        const event = TAVERN_EVENTS[Math.floor(Math.random() * TAVERN_EVENTS.length)];
+        E.line(`  ${event.text}`);
+        E.blank();
+        const result = event.effect(s);
+        GameState.save(s);
+        E[result.color]?.(result.msg) || E.line(result.msg);
+        if (result.color === 'gold' || result.color === 'cyan') {
+          await syncToChain(s, `Tavern: ${result.msg.trim()}`);
+        }
+      }
+      await E.pause();
+      continue;
+    }
+
+    if (choice === 'R') {
     if (s.gold >= cost) {
       s.gold -= cost;
       s.hp = s.maxHp;
@@ -734,7 +739,8 @@ async function screenInn() {
     } else {
       E.red('  Not enough gold! The barkeep frowns.');
     }
-    await E.pause();
+      await E.pause();
+    }
   }
   await screenTown();
 }
