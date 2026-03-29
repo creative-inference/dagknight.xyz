@@ -115,13 +115,16 @@ async function syncToChain(s, action) {
     const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
     const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
 
-    // Always do real UTXO lookup — never use cached outpoints
+    // Try real UTXO lookup first, fall back to cached outpoint
     const covAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
     let covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
-    if (!covUtxo) {
-      // Retry after 3s — UTXO from last update may not be indexed yet
-      await new Promise(r => setTimeout(r, 3000));
-      covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
+    if (!covUtxo && s._lastPlayerTxId && s._lastPlayerAmount) {
+      // Use cached outpoint — UTXO exists but not indexed yet
+      const currentSpk = kaspa.ScriptBuilder.fromScript(Covenant.buildPlayerScript(pub, ocHp, ocGold, ocLevel)).createPayToScriptHashScript();
+      covUtxo = {
+        outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
+        utxoEntry: { amount: s._lastPlayerAmount, blockDaaScore: '0', isCoinbase: false, scriptPublicKey: currentSpk },
+      };
     }
     if (!covUtxo) { _chainBusy = false; return; }
 
