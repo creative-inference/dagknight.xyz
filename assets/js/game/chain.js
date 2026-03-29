@@ -91,17 +91,21 @@ const Chain = {
   },
 
   // Simulated covenant tx flash on game actions
-  emitCovenantTx(action, detail) {
+  emitCovenantTx(action, detail, txId) {
     if (!this._feed) return;
 
+    const txLink = txId
+      ? `<br><a href="https://tn12.kaspa.stream/txs/${txId}" target="_blank" rel="noopener" class="ce-txlink">${txId.substring(0, 16)}...</a>`
+      : '';
     const el = document.createElement('div');
     el.className = 'chain-entry covenant-tx';
     el.innerHTML =
       `<span class="ce-time">${this._timestamp()}</span> ` +
       `<span class="ce-label">COV TX</span> ` +
       `<span class="ce-label">${action}</span>` +
-      `${this._connected ? '' : ' (simulated)'}<br>` +
-      `<span class="ce-detail">  ${detail}</span>`;
+      `${txId ? '' : ' (simulated)'}<br>` +
+      `<span class="ce-detail">  ${detail}</span>` +
+      txLink;
 
     this._feed.appendChild(el);
     this._trimFeed();

@@ -4,8 +4,8 @@
    ============================================================ */
 
 // Safe chain emit — no-op if Chain isn't loaded yet
-function chainEmit(action, detail) {
-  if (typeof Chain !== 'undefined') Chain.emitCovenantTx(action, detail);
+function chainEmit(action, detail, txId) {
+  if (typeof Chain !== 'undefined') Chain.emitCovenantTx(action, detail, txId);
 }
 
 // Sync game state to on-chain covenant UTXO
@@ -24,10 +24,11 @@ async function syncToChain(s, action) {
     const covAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
     const covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
     if (!covUtxo) return;
-    await Covenant.updatePlayerUtxo(kaspa, pk, pub, ocHp, ocGold, ocLevel, s.hp, s.gold, newLevel, covUtxo);
+    const result = await Covenant.updatePlayerUtxo(kaspa, pk, pub, ocHp, ocGold, ocLevel, s.hp, s.gold, newLevel, covUtxo);
+    const txId = result.transactionId || '';
     s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = newLevel;
     GameState.save(s);
-    chainEmit('Player::update', action);
+    chainEmit('Player::update', action, txId);
   } catch (err) {
     // Silently skip — game continues with localStorage
     console.log('Chain sync skipped:', err.message);
@@ -177,7 +178,7 @@ async function screenNewGame() {
       GameState.save(s);
       covSpin.stop('Player covenant UTXO created on TN12!', 't-cyan');
       E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
-      chainEmit('Player::create', `Covenant UTXO — ${s.name} the ${CLASSES[classKey].name}`);
+      chainEmit('Player::create', `Covenant UTXO — ${s.name} the ${CLASSES[classKey].name}`, txId);
     } catch (err) {
       covSpin.stop(`Covenant creation skipped: ${err.message}`, 't-dim');
       chainEmit('Player::create (sim)', `${window._state.name} — localStorage only`);

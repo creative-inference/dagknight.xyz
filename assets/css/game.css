@@ -388,6 +388,18 @@
   font-size: 0.7rem;
 }
 
+.ce-txlink {
+  color: var(--primary, #70c7ba);
+  text-decoration: none;
+  font-size: 0.65rem;
+  opacity: 0.7;
+  margin-left: 0.5rem;
+}
+.ce-txlink:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 768px) {
