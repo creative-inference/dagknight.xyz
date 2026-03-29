@@ -19,7 +19,8 @@
     <button onclick="connectNode()">1. Connect to Node</button>
     <button onclick="getInfo()">2. Get BlockDAG Info</button>
     <button onclick="createCovenant()">3. Deploy Covenant</button>
-    <button onclick="withdrawCovenant()">4. Withdraw Covenant</button>
+    <button onclick="updateCovenant()">4. Update State (same)</button>
+    <button onclick="updateCovenantNew()">5. Update State (change)</button>
   </div>
   <br>
   <div id="log"></div>
@@ -62,7 +63,9 @@
     }
 
     // Covenant script
-    const PLAYER_SCRIPT_HEX = '6b0814000000000000000800000000000000000801000000000000006c76009c6375567920aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac69557900a269547900a26953795179a269b9cb519c69557958cd587c7e557958cd587c7e557958cd587c7e7e7eb976c902e10094765193bc7c7eb976c97602e10094011c937cbc7eaa02000001aa7e01207e7c7e01877eb900ccc3876975757575757575516776519c6375537920aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac697575757551677500696868';
+    // Covenant declaration contract (168 bytes, without_selector=true, single entrypoint __update)
+    // Compiled from player.sil with #[covenant.singleton(mode=transition)]
+    const PLAYER_SCRIPT_HEX = '20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0814000000000000000800000000000000000801000000000000005779aa5479876958795879ac69567900a269557900a269547978a269b9cb519c69537901207c7e577958cd587c7e577958cd587c7e577958cd587c7e7e7e7eb976c97602a80094013c937cbc7eaa02000001aa7e01207e7c7e01877eb900ccc3876975757575757575757551';
 
     function buildScript(pubkeyHex) {
       return PLAYER_SCRIPT_HEX.replaceAll('aa'.repeat(32), pubkeyHex);
@@ -157,93 +160,119 @@
       }
     };
 
-    window.withdrawCovenant = async function() {
-      log('\n=== Withdrawing Covenant via wRPC ===', 'gold');
+    // Shared update logic: spend covenant → recreate with new state
+    async function doUpdate(newHp, newGold, newLevel, label) {
       if (!rpc) { log('Connect first!', 'err'); return; }
+      log(`\n=== ${label} ===`, 'gold');
 
       const pk = new kaspa.PrivateKey(keyHex);
       const pubHex = pk.toPublicKey().toXOnlyPublicKey().toString();
-      const script = buildScript(pubHex);
-      const covenantSpk = kaspa.ScriptBuilder.fromScript(script).createPayToScriptHashScript();
-      const covenantAddr = kaspa.addressFromScriptPublicKey(covenantSpk, 'testnet-12');
+      const currentScript = buildScript(pubHex);
+      const currentSpk = kaspa.ScriptBuilder.fromScript(currentScript).createPayToScriptHashScript();
+      const covenantAddr = kaspa.addressFromScriptPublicKey(currentSpk, 'testnet-12');
       log(`Covenant address: ${covenantAddr}`, 'gold');
 
-      // Find covenant UTXO via wRPC
-      const addrStr = covenantAddr.toString();
-      const covUtxoResp = await rpc.getUtxosByAddresses({ addresses: [addrStr] });
+      // Find covenant UTXO
+      const covUtxoResp = await rpc.getUtxosByAddresses({ addresses: [covenantAddr.toString()] });
       const covUtxos = covUtxoResp.entries || covUtxoResp || [];
       log(`Covenant UTXOs: ${covUtxos.length}`);
-      if (!covUtxos.length) { log('No covenant UTXO found!', 'err'); return; }
+      if (!covUtxos.length) { log('No covenant UTXO found! Deploy first.', 'err'); return; }
 
       const u = covUtxos[0];
       const uEntry = u.entry || u.utxoEntry || u;
       const amt = BigInt(uEntry.amount);
       log(`Found: ${amt} sompi`, 'ok');
+      log(`State: hp 20→${newHp}, gold 0→${newGold}, level 1→${newLevel}`, 'gold');
 
-      // Build withdraw tx: spend covenant → send to player address
-      const playerSpk = kaspa.payToAddressScript(address);
+      // Build new script with updated state
+      const newScript = buildScriptWithState(pubHex, newHp, newGold, newLevel);
+      const newSpk = kaspa.ScriptBuilder.fromScript(newScript).createPayToScriptHashScript();
 
+      // Build tx
+      const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
       const txInput = {
         previousOutpoint: { transactionId: u.outpoint.transactionId, index: u.outpoint.index },
         signatureScript: '', sequence: 0n, sigOpCount: 1,
         utxo: {
           outpoint: { transactionId: u.outpoint.transactionId, index: u.outpoint.index },
-          amount: amt, scriptPublicKey: covenantSpk,
+          amount: amt, scriptPublicKey: currentSpk,
           blockDaaScore: BigInt(uEntry.blockDaaScore || 0), isCoinbase: uEntry.isCoinbase || false,
         },
       };
 
-      // First build unsigned tx for signing (random fee jitter to avoid tx ID cache)
-      const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
       const unsignedTx = new kaspa.Transaction({
         version: 0,
         inputs: [txInput],
-        outputs: [{ value: amt - fee, scriptPublicKey: playerSpk }],
+        outputs: [{ value: amt - fee, scriptPublicKey: newSpk }],
         lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
       });
 
-      // Sign with P2SH scriptPublicKey (on-chain hash)
       const sigHex = kaspa.createInputSignature(unsignedTx, 0, pk);
 
-      // Build sig_script: <sig_with_push> <OP_1=withdraw> <PUSHDATA redeem>
-      const redeemLen = script.length / 2;
-      let sigScript = sigHex;                        // already has push opcode
-      sigScript += '51';                             // OP_1 (withdraw selector)
-      if (redeemLen <= 255) {
-        sigScript += '4c';                           // OP_PUSHDATA1
-        sigScript += redeemLen.toString(16).padStart(2, '0');
-      } else {
-        sigScript += '4d';                           // OP_PUSHDATA2
-        sigScript += (redeemLen & 0xff).toString(16).padStart(2, '0');
-        sigScript += ((redeemLen >> 8) & 0xff).toString(16).padStart(2, '0');
-      }
-      sigScript += script;                           // redeem script
+      // sig_script: <sig> <pubkey> <newHp> <newGold> <newLevel> <redeem>
+      // No selector (without_selector=true)
+      const pubkeyBytes = pk.toPublicKey().toXOnlyPublicKey().toString();
+      const argSb = new kaspa.ScriptBuilder();
+      argSb.addData(new Uint8Array(pubkeyBytes.match(/.{2}/g).map(h => parseInt(h, 16))));
+      argSb.addI64(BigInt(newHp));
+      argSb.addI64(BigInt(newGold));
+      argSb.addI64(BigInt(newLevel));
+      const argsHex = argSb.toString();
 
-      // Rebuild tx with sig_script set
-      const signedInput = {
-        previousOutpoint: { transactionId: u.outpoint.transactionId, index: u.outpoint.index },
-        signatureScript: sigScript, sequence: 0n, sigOpCount: 1,
-      };
+      const redeemLen = currentScript.length / 2;
+      let sigScript = sigHex;    // sig with push opcode
+      sigScript += argsHex;      // pubkey + newHp + newGold + newLevel
+      if (redeemLen <= 255) {
+        sigScript += '4c' + redeemLen.toString(16).padStart(2, '0');
+      } else {
+        sigScript += '4d' + (redeemLen & 0xff).toString(16).padStart(2, '0') + ((redeemLen >> 8) & 0xff).toString(16).padStart(2, '0');
+      }
+      sigScript += currentScript;
+
       const signedTx = new kaspa.Transaction({
         version: 0,
-        inputs: [signedInput],
-        outputs: [{ value: amt - fee, scriptPublicKey: playerSpk }],
+        inputs: [{
+          previousOutpoint: { transactionId: u.outpoint.transactionId, index: u.outpoint.index },
+          signatureScript: sigScript, sequence: 0n, sigOpCount: 1,
+        }],
+        outputs: [{ value: amt - fee, scriptPublicKey: newSpk }],
         lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
       });
 
-      const txJson = signedTx.toJSON();
-      console.log('sigScript length:', sigScript.length / 2, 'bytes');
-      console.log('tx input sigScript:', txJson.inputs?.[0]?.signatureScript?.length);
-      log('Submitting withdraw via wRPC...');
+      log(`sigScript: ${sigScript.length / 2} bytes`);
+      log('Submitting via wRPC...');
       try {
         const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
-        log(`WITHDRAWN via wRPC! TX: ${result.transactionId}`, 'ok');
-        log(`${amt} sompi returned to ${address}`, 'ok');
+        log(`STATE UPDATED! TX: ${result.transactionId}`, 'ok');
+        log(`New state: hp=${newHp} gold=${newGold} level=${newLevel}`, 'ok');
       } catch(e) {
-        log(`Withdraw failed: ${e.message}`, 'err');
-        console.log('TX:', JSON.stringify(txJson, (k,v) => typeof v === 'bigint' ? v.toString() : v, 2));
+        log(`Update failed: ${e.message}`, 'err');
+        console.log('TX:', JSON.stringify(signedTx.toJSON(), (k,v) => typeof v === 'bigint' ? v.toString() : v, 2));
       }
-    };
+    }
+
+    window.updateCovenant = () => doUpdate(20, 0, 1, 'Update State (same: hp=20, gold=0, level=1)');
+    window.updateCovenantNew = () => doUpdate(15, 40, 1, 'Update State (change: hp=15, gold=40, level=1)');
+
+    function int64LEHex(n) {
+      const buf = new ArrayBuffer(8);
+      new DataView(buf).setBigInt64(0, BigInt(n), true);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function buildScriptWithState(pubkeyHex, hp, gold, level) {
+      // New 168-byte format: 20<owner32> 08<hp8> 08<gold8> 08<level8> 57...
+      // Hex offsets: owner at 2-65, hp at 68-83, gold at 86-101, level at 104-119
+      let s = PLAYER_SCRIPT_HEX.replaceAll('aa'.repeat(32), pubkeyHex);
+      // Replace hp (after owner: hex offset 66=opcode 08, 68-83=value)
+      s = s.substring(0, 68) + int64LEHex(hp) + s.substring(84);
+      // Replace gold (hex offset 84=opcode 08, 86-101=value)
+      s = s.substring(0, 86) + int64LEHex(gold) + s.substring(102);
+      // Replace level (hex offset 102=opcode 08, 104-119=value)
+      s = s.substring(0, 104) + int64LEHex(level) + s.substring(120);
+      return s;
+    }
+
   </script>
 </body>
 </html>
