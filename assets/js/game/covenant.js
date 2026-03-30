@@ -35,7 +35,7 @@ const Covenant = {
   async ensureRpc(kaspa) {
     if (this._rpc) return this._rpc;
     this._kaspa = kaspa;
-    const rpc = new kaspa.RpcClient({ url: COVENANT_NODE_WS, encoding: kaspa.Encoding.SerdeJson });
+    const rpc = new kaspa.RpcClient({ url: COVENANT_NODE_WS });
     await rpc.connect();
     this._rpc = rpc;
     return rpc;

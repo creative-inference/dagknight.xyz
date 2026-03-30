@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html><head>
+  <title>TN12 Node Scanner</title>
+  <style>
+    body { background: #0a0e14; color: #c0c0c0; font-family: monospace; padding: 2rem; }
+    .ok { color: #70c7ba; } .err { color: #ff6b6b; } .gold { color: #d4a847; }
+    #log { white-space: pre-wrap; line-height: 1.6; }
+    button { margin: 0.3rem; padding: 0.5rem 1rem; background: #1a1e28; color: #70c7ba; border: 1px solid #333; cursor: pointer; font-family: monospace; }
+    input { background: #1a1e28; color: #70c7ba; border: 1px solid #333; padding: 0.3rem; font-family: monospace; width: 300px; }
+  </style>
+</head>
+<body>
+  <h2>TN12 Node Scanner — Find wRPC Endpoints</h2>
+  <p style="color: #888;">Paste peer IPs from node logs. Tests ws:// on ports 18310, 18210, 16210.</p>
+  <div>
+    <textarea id="ips" rows="6" cols="40" style="background:#1a1e28;color:#70c7ba;border:1px solid #333;font-family:monospace;" placeholder="Paste IPs, one per line:
+66.23.234.250
+79.99.46.67
+86.48.24.208"></textarea>
+    <br>
+    <button onclick="scanAll()">Scan All</button>
+    <button onclick="testOurNode()">Test Our Node (wss://tn12.dagknight.xyz)</button>
+  </div>
+  <br>
+  <div id="log"></div>
+  <script type="module">
+    const logEl = document.getElementById('log');
+    function log(t, cls) { logEl.innerHTML += cls ? `<span class="${cls}">${t}</span>\n` : t + '\n'; }
+
+    const wasmBase = location.hostname === 'localhost'
+      ? './node_modules/@kasdk/web/'
+      : 'https://storage.googleapis.com/vprogs-tweet-images/wasm/';
+    const kaspa = await import(wasmBase + 'kaspa.js');
+    await kaspa.default(wasmBase + 'kaspa_bg.wasm');
+    log('WASM loaded', 'ok');
+
+    async function tryConnect(url, timeout = 5000) {
+      return new Promise((resolve) => {
+        try {
+          const rpc = new kaspa.RpcClient({ url, encoding: kaspa.Encoding.SerdeJson });
+          const timer = setTimeout(() => { try { rpc.disconnect(); } catch {} resolve(null); }, timeout);
+          rpc.connect().then(async () => {
+            clearTimeout(timer);
+            try {
+              const info = await rpc.getBlockDagInfo();
+              resolve({ rpc, url, network: info.networkName, daa: info.virtualDaaScore, blocks: info.blockCount });
+            } catch (e) {
+              resolve({ rpc, url, error: e.message });
+            }
+          }).catch(() => { clearTimeout(timer); resolve(null); });
+        } catch { resolve(null); }
+      });
+    }
+
+    // Expose kaspa globally for console testing
+    window.kaspa = kaspa;
+
+    window.testTN12Node = async function(url) {
+      log(`\n=== Testing ${url} ===`, 'gold');
+      const result = await tryConnect(url, 8000);
+      if (result && !result.error) {
+        log(`CONNECTED! DAA: ${result.daa}`, 'ok');
+        window._testRpc = result.rpc;
+        // Check wallet
+        try {
+          const addr = 'kaspatest:qrn5fqkjlc0a0gc7rjv922jsr079ds6xydazjfdg3x9tjsx46gx5cwzqrhyu2';
+          const utxos = await result.rpc.getUtxosByAddresses({ addresses: [addr] });
+          const e = utxos.entries || utxos || [];
+          log(`Wallet UTXOs: ${e.length} ${e.map(u=>(u.entry||u).amount)}`, e.length ? 'ok' : 'err');
+          // Check faucet
+          const faucetAddr = 'kaspatest:qzgpfk4kz6vy8htl37vh20haz4gksyyhm5agzxq7ctumskgd2047qhwzahdmt';
+          const fUtxos = await result.rpc.getUtxosByAddresses({ addresses: [faucetAddr] });
+          const fe = fUtxos.entries || fUtxos || [];
+          log(`Faucet UTXOs: ${fe.length}`, fe.length ? 'ok' : 'err');
+        } catch (e) { log(`Query error: ${e.message}`, 'err'); }
+      } else {
+        log(`Failed: ${result?.error || 'timeout'}`, 'err');
+      }
+    };
+
+    window.testOurNode = async function() {
+      log('\n=== Testing wss://tn12.dagknight.xyz ===', 'gold');
+      const result = await tryConnect('wss://tn12.dagknight.xyz', 8000);
+      if (result && !result.error) {
+        log(`CONNECTED! Network: ${result.network} DAA: ${result.daa} Blocks: ${result.blocks}`, 'ok');
+
+        // Test submitting a simple query
+        try {
+          const utxos = await result.rpc.getUtxosByAddresses({ addresses: ['kaspatest:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e'] });
+          log(`UTXO query works! Entries: ${(utxos.entries || utxos || []).length}`, 'ok');
+        } catch (e) {
+          log(`UTXO query failed: ${e.message}`, 'err');
+        }
+      } else if (result) {
+        log(`Connected but error: ${result.error}`, 'err');
+      } else {
+        log('Connection timeout/failed', 'err');
+      }
+    };
+
+    window.scanAll = async function() {
+      const ips = document.getElementById('ips').value.trim().split('\n').filter(Boolean).map(s => s.trim());
+      if (!ips.length) { log('No IPs to scan', 'err'); return; }
+
+      const ports = [18310, 18210, 16210];
+      log(`\n=== Scanning ${ips.length} IPs on ports ${ports.join(', ')} ===`, 'gold');
+
+      for (const ip of ips) {
+        for (const port of ports) {
+          const url = `ws://${ip}:${port}`;
+          log(`  Trying ${url}...`);
+          const result = await tryConnect(url, 3000);
+          if (result && !result.error) {
+            log(`  ★ ${url} — Network: ${result.network} DAA: ${result.daa}`, 'ok');
+            // Try Borsh encoding too
+          } else if (result) {
+            log(`  ${url} — connected but: ${result.error}`, 'gold');
+          } else {
+            log(`  ${url} — no response`, 'err');
+          }
+        }
+      }
+      log('\nScan complete.', 'gold');
+    };
+  </script>
+</body>
+</html>
