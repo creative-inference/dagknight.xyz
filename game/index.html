@@ -297,6 +297,252 @@ document.getElementById('chat-field')?.addEventListener('keydown', (e) => {
 
 setInterval(refreshChat, 5000);
 setTimeout(refreshChat, 2000);
+
+// --- PvP Challenges ---
+const PVP_API = 'https://tn12.dagknight.xyz/api';
+
+async function challengePlayer(targetAddr, targetName) {
+  const s = window._state;
+  if (!s || !s.name || !Wallet.address || !Wallet._kaspa) return;
+  const kaspa = Wallet._kaspa;
+  const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+  const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+
+  // Find our covenant UTXO
+  const myAddr = Covenant.getCovenantAddress(kaspa, pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+  let myUtxo = myAddr ? await Covenant.findCovenantUtxo(myAddr) : null;
+  if (!myUtxo && s._lastPlayerTxId) {
+    myUtxo = { outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
+      utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false } };
+  }
+  if (!myUtxo) { alert('Covenant UTXO not found'); return; }
+
+  try {
+    const resp = await fetch(PVP_API + '/challenge', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fromAddr: Wallet.address, toAddr: targetAddr,
+        fromName: s.name, toName: targetName,
+        stake: s.level * 10,
+        fromPubkey: pub,
+        fromHp: s._onChainHp, fromGold: s._onChainGold, fromLevel: s._onChainLevel,
+        fromUtxo: { outpoint: myUtxo.outpoint, amount: String((myUtxo.utxoEntry || myUtxo.entry).amount) },
+      }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      s._pendingChallenge = data.challengeId;
+      GameState.save(s);
+    }
+  } catch (e) { console.log('Challenge error:', e); }
+}
+
+// Poll for incoming challenges
+async function pollChallenges() {
+  if (!Wallet.address || !window._state) return;
+  try {
+    const resp = await fetch(PVP_API + '/challenges?addr=' + Wallet.address);
+    const challenges = await resp.json();
+
+    for (const c of challenges) {
+      if (c.status === 'pending' && c.toAddr === Wallet.address) {
+        // Incoming challenge — show accept prompt
+        const accept = confirm(c.fromName + ' (Lv' + c.fromLevel + ') challenges you to PvP! Accept?');
+        if (accept) await acceptChallenge(c);
+      }
+      if (c.status === 'accepted' && c.fromAddr === Wallet.address) {
+        // Our challenge was accepted — complete the PvP tx
+        await completePvP(c);
+      }
+    }
+  } catch {}
+}
+
+async function acceptChallenge(challenge) {
+  const s = window._state;
+  const kaspa = Wallet._kaspa;
+  const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+  const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+
+  // Find our covenant UTXO
+  const myAddr = Covenant.getCovenantAddress(kaspa, pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+  let myUtxo = myAddr ? await Covenant.findCovenantUtxo(myAddr) : null;
+  if (!myUtxo && s._lastPlayerTxId) {
+    myUtxo = { outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
+      utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false } };
+  }
+  if (!myUtxo) { alert('Your covenant UTXO not found'); return; }
+
+  // Build the unsigned PvP tx to create our sig
+  const fromScript = Covenant.buildPlayerScript(challenge.fromPubkey, challenge.fromHp, challenge.fromGold, challenge.fromLevel);
+  const fromSpk = kaspa.ScriptBuilder.fromScript(fromScript).createPayToScriptHashScript();
+  const myScript = Covenant.buildPlayerScript(pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+  const mySpk = kaspa.ScriptBuilder.fromScript(myScript).createPayToScriptHashScript();
+
+  // Combat: challenger attacks defender. Simple: both lose some HP, winner gets gold
+  const seed = challenge.id || 'pvp';
+  const rng = new SeededRng(seed);
+  const myDmg = rng.next(s._onChainHp) + 1;
+  const theirDmg = rng.next(challenge.fromHp) + 1;
+
+  const newMyHp = Math.max(1, s._onChainHp - myDmg);
+  const newTheirHp = Math.max(1, challenge.fromHp - theirDmg);
+  const stake = challenge.stake || 10;
+  const iWin = theirDmg > myDmg;
+  const newMyGold = iWin ? s._onChainGold + stake : Math.max(0, s._onChainGold - stake);
+  const newTheirGold = iWin ? Math.max(0, challenge.fromGold - stake) : challenge.fromGold + stake;
+
+  const newFromScript = Covenant.buildPlayerScript(challenge.fromPubkey, newTheirHp, newTheirGold, challenge.fromLevel);
+  const newFromSpk = kaspa.ScriptBuilder.fromScript(newFromScript).createPayToScriptHashScript();
+  const newMyScript = Covenant.buildPlayerScript(pub, newMyHp, newMyGold, s._onChainLevel);
+  const newMySpk = kaspa.ScriptBuilder.fromScript(newMyScript).createPayToScriptHashScript();
+
+  const myAmt = BigInt(myUtxo.utxoEntry?.amount || myUtxo.entry?.amount || '20000000');
+  const theirAmt = BigInt(challenge.fromUtxo.amount);
+  const fee = 10000n;
+
+  // Build unsigned tx — input 0: challenger, input 1: us
+  const unsignedTx = new kaspa.Transaction({
+    version: 0,
+    inputs: [
+      { previousOutpoint: challenge.fromUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+        utxo: { outpoint: challenge.fromUtxo.outpoint, amount: theirAmt, scriptPublicKey: fromSpk, blockDaaScore: 0n, isCoinbase: false } },
+      { previousOutpoint: myUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+        utxo: { outpoint: myUtxo.outpoint, amount: myAmt, scriptPublicKey: mySpk, blockDaaScore: 0n, isCoinbase: false } },
+    ],
+    outputs: [
+      { value: theirAmt - fee, scriptPublicKey: newFromSpk },
+      { value: myAmt, scriptPublicKey: newMySpk },
+    ],
+    lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+  });
+
+  // Sign input 1 (our covenant)
+  const sigHex = kaspa.createInputSignature(unsignedTx, 1, pk);
+  const pubBytes = new Uint8Array(pub.match(/.{2}/g).map(h => parseInt(h, 16)));
+  const argSb = new kaspa.ScriptBuilder();
+  argSb.addData(pubBytes);
+  argSb.addI64(BigInt(newMyHp)); argSb.addI64(BigInt(newMyGold)); argSb.addI64(BigInt(s._onChainLevel));
+  const redeemSb = new kaspa.ScriptBuilder();
+  redeemSb.addData(new Uint8Array(myScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+  const mySigScript = sigHex + argSb.toString() + redeemSb.toString();
+
+  // Send accept with our sig data
+  await fetch(PVP_API + '/accept', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      challengeId: challenge.id,
+      toAddr: Wallet.address, toPubkey: pub,
+      toHp: s._onChainHp, toGold: s._onChainGold, toLevel: s._onChainLevel,
+      toUtxo: { outpoint: myUtxo.outpoint, amount: String(myAmt) },
+      toSigScript: mySigScript,
+      newTheirHp, newTheirGold, newMyHp, newMyGold, seed,
+    }),
+  });
+
+  // Update local state optimistically
+  s._onChainHp = newMyHp; s._onChainGold = newMyGold;
+  s.hp = newMyHp; s.gold = newMyGold;
+  GameState.save(s);
+}
+
+async function completePvP(challenge) {
+  const s = window._state;
+  const kaspa = Wallet._kaspa;
+  const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+  const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+
+  // Rebuild the tx with both sigs
+  const fromScript = Covenant.buildPlayerScript(pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+  const fromSpk = kaspa.ScriptBuilder.fromScript(fromScript).createPayToScriptHashScript();
+  const toScript = Covenant.buildPlayerScript(challenge.toPubkey, challenge.toHp, challenge.toGold, challenge.toLevel);
+  const toSpk = kaspa.ScriptBuilder.fromScript(toScript).createPayToScriptHashScript();
+
+  const seed = challenge.seed || challenge.id;
+  const rng = new SeededRng(seed);
+  const theirDmg = rng.next(challenge.toHp) + 1;
+  const myDmg = rng.next(s._onChainHp) + 1;
+
+  const newTheirHp = challenge.newMyHp || Math.max(1, challenge.toHp - theirDmg);
+  const newTheirGold = challenge.newMyGold || challenge.toGold;
+  const newMyHp = challenge.newTheirHp || Math.max(1, s._onChainHp - myDmg);
+  const newMyGold = challenge.newTheirGold || s._onChainGold;
+
+  const newFromScript = Covenant.buildPlayerScript(pub, newMyHp, newMyGold, s._onChainLevel);
+  const newFromSpk = kaspa.ScriptBuilder.fromScript(newFromScript).createPayToScriptHashScript();
+  const newToScript = Covenant.buildPlayerScript(challenge.toPubkey, newTheirHp, newTheirGold, challenge.toLevel);
+  const newToSpk = kaspa.ScriptBuilder.fromScript(newToScript).createPayToScriptHashScript();
+
+  // Get our UTXO
+  const myAddr = Covenant.getCovenantAddress(kaspa, pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+  let myUtxo = myAddr ? await Covenant.findCovenantUtxo(myAddr) : null;
+  if (!myUtxo && s._lastPlayerTxId) {
+    myUtxo = { outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
+      utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false } };
+  }
+  if (!myUtxo) return;
+
+  const myAmt = BigInt(myUtxo.utxoEntry?.amount || myUtxo.entry?.amount || '20000000');
+  const theirAmt = BigInt(challenge.toUtxo.amount);
+  const fee = 10000n;
+
+  // Build unsigned tx for our sig
+  const unsignedTx = new kaspa.Transaction({
+    version: 0,
+    inputs: [
+      { previousOutpoint: myUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+        utxo: { outpoint: myUtxo.outpoint, amount: myAmt, scriptPublicKey: fromSpk, blockDaaScore: 0n, isCoinbase: false } },
+      { previousOutpoint: challenge.toUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+        utxo: { outpoint: challenge.toUtxo.outpoint, amount: theirAmt, scriptPublicKey: toSpk, blockDaaScore: 0n, isCoinbase: false } },
+    ],
+    outputs: [
+      { value: myAmt - fee, scriptPublicKey: newFromSpk },
+      { value: theirAmt, scriptPublicKey: newToSpk },
+    ],
+    lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+  });
+
+  // Sign input 0 (our covenant)
+  const sigHex = kaspa.createInputSignature(unsignedTx, 0, pk);
+  const pubBytes = new Uint8Array(pub.match(/.{2}/g).map(h => parseInt(h, 16)));
+  const argSb = new kaspa.ScriptBuilder();
+  argSb.addData(pubBytes);
+  argSb.addI64(BigInt(newMyHp)); argSb.addI64(BigInt(newMyGold)); argSb.addI64(BigInt(s._onChainLevel));
+  const redeemSb = new kaspa.ScriptBuilder();
+  redeemSb.addData(new Uint8Array(fromScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+  const mySigScript = sigHex + argSb.toString() + redeemSb.toString();
+
+  // Build final tx with both sigs
+  const signedTx = new kaspa.Transaction({
+    version: 0,
+    inputs: [
+      { previousOutpoint: myUtxo.outpoint, signatureScript: mySigScript, sequence: 0n, sigOpCount: 1 },
+      { previousOutpoint: challenge.toUtxo.outpoint, signatureScript: challenge.toSigScript, sequence: 0n, sigOpCount: 1 },
+    ],
+    outputs: [
+      { value: myAmt - fee, scriptPublicKey: newFromSpk },
+      { value: theirAmt, scriptPublicKey: newToSpk },
+    ],
+    lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+  });
+
+  try {
+    const rpc = await Covenant.ensureRpc(kaspa);
+    const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+    const txId = result.transactionId;
+    s._onChainHp = newMyHp; s._onChainGold = newMyGold;
+    s._lastPlayerTxId = txId; s._lastPlayerAmount = String(myAmt - fee);
+    s.hp = newMyHp; s.gold = newMyGold;
+    GameState.save(s);
+    Chain.emitCovenantTx('ICC: Real PvP', 'Two players, one atomic tx!', txId);
+    await fetch(PVP_API + '/submit-pvp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeId: challenge.id, txId }),
+    });
+  } catch (e) { console.log('PvP submit error:', e.message); }
+}
+
+setInterval(pollChallenges, 10000);
 </script>
 
 <div class="chain-disclaimer">

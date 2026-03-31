@@ -129,14 +129,18 @@ const Chain = {
         return;
       }
       const classNames = ['', 'Knight', 'Mage', 'Rogue', 'Cleric'];
+      const myAddr = Wallet?.address || '';
       listEl.innerHTML = players.map(p => {
         const cls = classNames[p.classId] || 'Unknown';
-        const addr = p.address ? p.address.substring(0, 20) + '...' : '';
-        return `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1a1e28;padding:3px 0;">` +
-          `<span style="color:#70c7ba;">${p.name}</span>` +
-          `<span style="color:#888;font-size:0.75rem;">${cls}</span>` +
-          `<span style="color:#d4a847;">Lv ${p.level}</span>` +
-          `<span style="color:#444;font-size:0.7rem;">${addr}</span>` +
+        const isMe = p.address === myAddr;
+        const challengeBtn = (!isMe && window._state?.name)
+          ? `<button onclick="challengePlayer('${p.address}','${p.name}')" style="background:#3a1a1a;color:#ff6b6b;border:1px solid #5a2a2a;border-radius:3px;padding:1px 6px;font-size:0.65rem;cursor:pointer;font-family:inherit;">PvP</button>`
+          : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1a1e28;padding:3px 0;gap:4px;">` +
+          `<span style="color:${isMe ? '#d4a847' : '#70c7ba'};flex:1;">${p.name}${isMe ? ' (you)' : ''}</span>` +
+          `<span style="color:#888;font-size:0.7rem;">${cls}</span>` +
+          `<span style="color:#d4a847;font-size:0.75rem;">Lv${p.level}</span>` +
+          challengeBtn +
           `</div>`;
       }).join('');
     } catch {
