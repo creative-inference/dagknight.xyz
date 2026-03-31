@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DAG Gate — Test PvP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Space+Grotesk:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/styles.css">
+  <link rel="stylesheet" href="../assets/css/game.css">
+  <style>
+    .dev-banner { background: #ff6b6b; color: #000; text-align: center; padding: 0.3rem; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700; letter-spacing: 2px; }
+    #game-panel { display: grid; grid-template-columns: 1fr 300px; gap: 6px; max-width: 1400px; margin: 0 auto; padding: 0.5rem; }
+    #game-panel #terminal { max-width: none; min-width: 0; margin: 0; overflow: hidden; }
+    #game-panel #game-sidebar { display: flex; flex-direction: column; gap: 4px; }
+    #game-panel #chain-log { max-width: none; margin: 0; max-height: 250px; overflow-y: auto; }
+    #game-panel #player-list { max-width: none; margin: 0; }
+    #game-panel #chat-panel { margin: 0; }
+    #game-panel #chat-messages { max-height: 180px; }
+    @media (max-width: 900px) { #game-panel { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="dev-banner">TEST MODE — PvP Testing — Open two windows</div>
+
+  <div id="game-panel">
+    <div id="terminal">
+      <div id="terminal-output"></div>
+      <div id="terminal-input" class="hidden">
+        <span class="prompt-char">&gt;</span>
+        <input type="text" id="input-field" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
+    <div id="game-sidebar">
+      <div id="chain-log">
+        <div class="chain-header">
+          <span class="chain-title">BlockDAG Activity Log</span>
+          <span class="chain-status"><span class="chain-dot"></span> SIMULATED</span>
+        </div>
+        <div id="chain-feed"></div>
+      </div>
+
+      <div id="player-list" style="font-family: 'JetBrains Mono', monospace;">
+        <div style="background: #0d1117; border: 1px solid #2a2e38; border-radius: 6px; padding: 0.8rem 1rem;">
+          <div style="color: #d4a847; font-size: 0.85rem; margin-bottom: 0.5rem;">Active Knights on TN12</div>
+          <div id="beacon-list" style="color: #70c7ba; font-size: 0.8rem; line-height: 1.8;">
+            <span style="color: #555;">Scanning...</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="chat-panel" style="font-family: 'JetBrains Mono', monospace;">
+        <div style="background: #0d1117; border: 1px solid #2a2e38; border-radius: 6px; padding: 0.8rem 1rem;">
+          <div style="color: #d4a847; font-size: 0.85rem; margin-bottom: 0.5rem;">Tavern Chat</div>
+          <div id="chat-messages" style="color: #c0c0c0; font-size: 0.75rem; line-height: 1.6; max-height: 200px; overflow-y: auto;">
+            <span style="color: #555;">No messages yet...</span>
+          </div>
+          <div style="display:flex;gap:4px;margin-top:0.5rem;">
+            <input type="text" id="chat-field" placeholder="Say something..." maxlength="200"
+              style="flex:1;background:#1a1e28;color:#70c7ba;border:1px solid #2a2e38;border-radius:3px;padding:0.3rem 0.5rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;outline:none;">
+            <button onclick="sendChat()" style="background:#1a3a2a;color:#70c7ba;border:1px solid #2a5a3a;border-radius:3px;padding:0.3rem 0.6rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;cursor:pointer;">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <meta name="kasdk-wasm" content="https://storage.googleapis.com/vprogs-tweet-images/wasm/">
+  <script src="../assets/js/game/data.js"></script>
+  <script src="../assets/js/game/state.js"></script>
+  <script src="../assets/js/game/combat.js"></script>
+  <script src="../assets/js/game/wallet.js"></script>
+  <script src="../assets/js/game/covenant.js"></script>
+  <script src="../assets/js/game/screens.js"></script>
+  <script src="../assets/js/game/engine.js"></script>
+  <script src="../assets/js/game/chain.js"></script>
+
+  <script>
+  // --- Chat ---
+  const CHAT_API = 'https://tn12.dagknight.xyz/api/chat';
+  let _lastChatTs = 0;
+
+  async function refreshChat() {
+    const el = document.getElementById('chat-messages');
+    if (!el) return;
+    try {
+      const resp = await fetch(CHAT_API + '?since=' + _lastChatTs);
+      const msgs = await resp.json();
+      if (!msgs.length && _lastChatTs === 0) return;
+      if (msgs.length) {
+        if (_lastChatTs === 0) el.innerHTML = '';
+        for (const m of msgs) {
+          const div = document.createElement('div');
+          const time = new Date(m.ts).toLocaleTimeString().slice(0, 5);
+          div.innerHTML = `<span style="color:#555;">${time}</span> <span style="color:#d4a847;">${m.name}:</span> ${m.message}`;
+          el.appendChild(div);
+          _lastChatTs = Math.max(_lastChatTs, m.ts);
+        }
+        el.scrollTop = el.scrollHeight;
+      }
+    } catch {}
+  }
+
+  async function sendChat() {
+    const field = document.getElementById('chat-field');
+    const msg = field.value.trim();
+    if (!msg) return;
+    const s = window._state;
+    if (!s || !s.name || !Wallet.address) {
+      const el = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.innerHTML = '<span style="color:#ff6b6b;">Start a game first to chat.</span>';
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+      field.value = '';
+      return;
+    }
+    try {
+      await fetch(CHAT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: s.name, message: msg, address: Wallet.address }),
+      });
+      field.value = '';
+      refreshChat();
+    } catch {}
+  }
+
+  document.getElementById('chat-field')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+    e.stopPropagation();
+  });
+
+  setInterval(refreshChat, 5000);
+  setTimeout(refreshChat, 2000);
+
+  // --- PvP Challenges ---
+  const PVP_API = 'https://tn12.dagknight.xyz/api';
+
+  async function challengePlayer(targetAddr, targetName) {
+    const s = window._state;
+    if (!s || !s.name || !Wallet.address || !Wallet._kaspa) return;
+    const kaspa = Wallet._kaspa;
+    const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+    const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+    const myAddr = Covenant.getCovenantAddress(kaspa, pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+    let myUtxo = myAddr ? await Covenant.findCovenantUtxo(myAddr) : null;
+    if (!myUtxo && s._lastPlayerTxId) {
+      myUtxo = { outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
+        utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false } };
+    }
+    if (!myUtxo) { alert('Covenant UTXO not found'); return; }
+    try {
+      const resp = await fetch(PVP_API + '/challenge', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromAddr: Wallet.address, toAddr: targetAddr,
+          fromName: s.name, toName: targetName,
+          stake: s.level * 10,
+          fromPubkey: pub,
+          fromHp: s._onChainHp, fromGold: s._onChainGold, fromLevel: s._onChainLevel,
+          fromUtxo: { outpoint: myUtxo.outpoint, amount: String((myUtxo.utxoEntry || myUtxo.entry).amount) },
+        }),
+      });
+      const data = await resp.json();
+      if (data.ok) { s._pendingChallenge = data.challengeId; GameState.save(s); }
+    } catch (e) { console.log('Challenge error:', e); }
+  }
+
+  async function pollChallenges() {
+    if (!Wallet.address || !window._state) return;
+    try {
+      const resp = await fetch(PVP_API + '/challenges?addr=' + Wallet.address);
+      const challenges = await resp.json();
+      for (const c of challenges) {
+        if (c.status === 'pending' && c.toAddr === Wallet.address) {
+          const accept = confirm(c.fromName + ' (Lv' + c.fromLevel + ') challenges you! Accept?');
+          if (accept) await acceptChallenge(c);
+        }
+        if (c.status === 'accepted' && c.fromAddr === Wallet.address) {
+          await completePvP(c);
+        }
+      }
+    } catch {}
+  }
+
+  async function acceptChallenge(challenge) {
+    const s = window._state;
+    const kaspa = Wallet._kaspa;
+    const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+    const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+    const myAddr = Covenant.getCovenantAddress(kaspa, pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+    let myUtxo = myAddr ? await Covenant.findCovenantUtxo(myAddr) : null;
+    if (!myUtxo && s._lastPlayerTxId) {
+      myUtxo = { outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
+        utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false } };
+    }
+    if (!myUtxo) { alert('Your covenant UTXO not found'); return; }
+
+    const fromScript = Covenant.buildPlayerScript(challenge.fromPubkey, challenge.fromHp, challenge.fromGold, challenge.fromLevel);
+    const fromSpk = kaspa.ScriptBuilder.fromScript(fromScript).createPayToScriptHashScript();
+    const myScript = Covenant.buildPlayerScript(pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+    const mySpk = kaspa.ScriptBuilder.fromScript(myScript).createPayToScriptHashScript();
+
+    const rng = new SeededRng(challenge.id || 'pvp');
+    const myDmg = rng.next(s._onChainHp) + 1;
+    const theirDmg = rng.next(challenge.fromHp) + 1;
+    const newMyHp = Math.max(1, s._onChainHp - myDmg);
+    const newTheirHp = Math.max(1, challenge.fromHp - theirDmg);
+    const stake = challenge.stake || 10;
+    const iWin = theirDmg > myDmg;
+    const newMyGold = iWin ? s._onChainGold + stake : Math.max(0, s._onChainGold - stake);
+    const newTheirGold = iWin ? Math.max(0, challenge.fromGold - stake) : challenge.fromGold + stake;
+
+    const newFromScript = Covenant.buildPlayerScript(challenge.fromPubkey, newTheirHp, newTheirGold, challenge.fromLevel);
+    const newFromSpk = kaspa.ScriptBuilder.fromScript(newFromScript).createPayToScriptHashScript();
+    const newMyScript = Covenant.buildPlayerScript(pub, newMyHp, newMyGold, s._onChainLevel);
+    const newMySpk = kaspa.ScriptBuilder.fromScript(newMyScript).createPayToScriptHashScript();
+
+    const myAmt = BigInt(myUtxo.utxoEntry?.amount || myUtxo.entry?.amount || '20000000');
+    const theirAmt = BigInt(challenge.fromUtxo.amount);
+    const fee = 10000n;
+
+    const unsignedTx = new kaspa.Transaction({
+      version: 0,
+      inputs: [
+        { previousOutpoint: challenge.fromUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+          utxo: { outpoint: challenge.fromUtxo.outpoint, amount: theirAmt, scriptPublicKey: fromSpk, blockDaaScore: 0n, isCoinbase: false } },
+        { previousOutpoint: myUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+          utxo: { outpoint: myUtxo.outpoint, amount: myAmt, scriptPublicKey: mySpk, blockDaaScore: 0n, isCoinbase: false } },
+      ],
+      outputs: [
+        { value: theirAmt - fee, scriptPublicKey: newFromSpk },
+        { value: myAmt, scriptPublicKey: newMySpk },
+      ],
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const sigHex = kaspa.createInputSignature(unsignedTx, 1, pk);
+    const pubBytes = new Uint8Array(pub.match(/.{2}/g).map(h => parseInt(h, 16)));
+    const argSb = new kaspa.ScriptBuilder();
+    argSb.addData(pubBytes);
+    argSb.addI64(BigInt(newMyHp)); argSb.addI64(BigInt(newMyGold)); argSb.addI64(BigInt(s._onChainLevel));
+    const redeemSb = new kaspa.ScriptBuilder();
+    redeemSb.addData(new Uint8Array(myScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+    const mySigScript = sigHex + argSb.toString() + redeemSb.toString();
+
+    await fetch(PVP_API + '/accept', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challengeId: challenge.id, toAddr: Wallet.address, toPubkey: pub,
+        toHp: s._onChainHp, toGold: s._onChainGold, toLevel: s._onChainLevel,
+        toUtxo: { outpoint: myUtxo.outpoint, amount: String(myAmt) },
+        toSigScript: mySigScript, newTheirHp, newTheirGold, newMyHp, newMyGold,
+      }),
+    });
+
+    s._onChainHp = newMyHp; s._onChainGold = newMyGold;
+    s.hp = newMyHp; s.gold = newMyGold;
+    GameState.save(s);
+  }
+
+  async function completePvP(challenge) {
+    const s = window._state;
+    const kaspa = Wallet._kaspa;
+    const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+    const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+
+    const fromScript = Covenant.buildPlayerScript(pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+    const fromSpk = kaspa.ScriptBuilder.fromScript(fromScript).createPayToScriptHashScript();
+    const toScript = Covenant.buildPlayerScript(challenge.toPubkey, challenge.toHp, challenge.toGold, challenge.toLevel);
+    const toSpk = kaspa.ScriptBuilder.fromScript(toScript).createPayToScriptHashScript();
+
+    const newMyHp = challenge.newTheirHp;
+    const newMyGold = challenge.newTheirGold;
+    const newTheirHp = challenge.newMyHp;
+    const newTheirGold = challenge.newMyGold;
+
+    const newFromScript = Covenant.buildPlayerScript(pub, newMyHp, newMyGold, s._onChainLevel);
+    const newFromSpk = kaspa.ScriptBuilder.fromScript(newFromScript).createPayToScriptHashScript();
+    const newToScript = Covenant.buildPlayerScript(challenge.toPubkey, newTheirHp, newTheirGold, challenge.toLevel);
+    const newToSpk = kaspa.ScriptBuilder.fromScript(newToScript).createPayToScriptHashScript();
+
+    const myAddr = Covenant.getCovenantAddress(kaspa, pub, s._onChainHp, s._onChainGold, s._onChainLevel);
+    let myUtxo = myAddr ? await Covenant.findCovenantUtxo(myAddr) : null;
+    if (!myUtxo && s._lastPlayerTxId) {
+      myUtxo = { outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
+        utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false } };
+    }
+    if (!myUtxo) return;
+
+    const myAmt = BigInt(myUtxo.utxoEntry?.amount || myUtxo.entry?.amount || '20000000');
+    const theirAmt = BigInt(challenge.toUtxo.amount);
+    const fee = 10000n;
+
+    const unsignedTx = new kaspa.Transaction({
+      version: 0,
+      inputs: [
+        { previousOutpoint: myUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+          utxo: { outpoint: myUtxo.outpoint, amount: myAmt, scriptPublicKey: fromSpk, blockDaaScore: 0n, isCoinbase: false } },
+        { previousOutpoint: challenge.toUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+          utxo: { outpoint: challenge.toUtxo.outpoint, amount: theirAmt, scriptPublicKey: toSpk, blockDaaScore: 0n, isCoinbase: false } },
+      ],
+      outputs: [
+        { value: myAmt - fee, scriptPublicKey: newFromSpk },
+        { value: theirAmt, scriptPublicKey: newToSpk },
+      ],
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const sigHex = kaspa.createInputSignature(unsignedTx, 0, pk);
+    const pubBytes = new Uint8Array(pub.match(/.{2}/g).map(h => parseInt(h, 16)));
+    const argSb = new kaspa.ScriptBuilder();
+    argSb.addData(pubBytes);
+    argSb.addI64(BigInt(newMyHp)); argSb.addI64(BigInt(newMyGold)); argSb.addI64(BigInt(s._onChainLevel));
+    const redeemSb = new kaspa.ScriptBuilder();
+    redeemSb.addData(new Uint8Array(fromScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+    const mySigScript = sigHex + argSb.toString() + redeemSb.toString();
+
+    const signedTx = new kaspa.Transaction({
+      version: 0,
+      inputs: [
+        { previousOutpoint: myUtxo.outpoint, signatureScript: mySigScript, sequence: 0n, sigOpCount: 1 },
+        { previousOutpoint: challenge.toUtxo.outpoint, signatureScript: challenge.toSigScript, sequence: 0n, sigOpCount: 1 },
+      ],
+      outputs: [
+        { value: myAmt - fee, scriptPublicKey: newFromSpk },
+        { value: theirAmt, scriptPublicKey: newToSpk },
+      ],
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    try {
+      const rpc = await Covenant.ensureRpc(kaspa);
+      const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+      const txId = result.transactionId;
+      s._onChainHp = newMyHp; s._onChainGold = newMyGold;
+      s._lastPlayerTxId = txId; s._lastPlayerAmount = String(myAmt - fee);
+      s.hp = newMyHp; s.gold = newMyGold;
+      GameState.save(s);
+      Chain.emitCovenantTx('ICC: Real PvP', 'Two players, one atomic tx!', txId);
+      await fetch(PVP_API + '/submit-pvp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challengeId: challenge.id, txId }),
+      });
+    } catch (e) { console.log('PvP submit error:', e.message); }
+  }
+
+  setInterval(pollChallenges, 10000);
+  </script>
+</body>
+</html>
