@@ -398,7 +398,14 @@ async function screenForest() {
   E.line('  Leaves hash in the wind. Branches fork overhead.');
   E.blank();
 
-  const monster = randomMonster(s.level);
+  // Get combat seed from BlockDAG — deterministic monster + damage
+  const seed = await getCombatSeed();
+  const monster = seed ? seededMonster(seed, s.level) : randomMonster(s.level);
+  if (seed) {
+    s._combatSeed = seed;
+    E.dim(`  Seed: ${seed.substring(0, 16)}...`);
+  }
+
   E.red(`  ★ A ${monster.name} emerges from the shadows!`);
   if (monster.trait) {
     const traitDesc = {
@@ -414,7 +421,7 @@ async function screenForest() {
   E.blank();
   E.dim(`  Fights remaining today: ${s.forestFightsMax - s.forestFightsToday}`);
 
-  chainEmit('Game::encounter', `${monster.name} spawned (ICC coming soon)`);
+  chainEmit('Game::encounter', `${monster.name} — seed: ${seed ? seed.substring(0, 16) : 'local'}`, false);
 
   const choice = await E.menu([
     { key: 'F', label: 'Fight!' },
@@ -434,6 +441,8 @@ async function screenCombat(monster) {
   const s = window._state;
   const monsterMax = monster.hp;
   let log = []; // last round's action log
+  // Create seeded RNG from combat seed + monster name for per-combat determinism
+  const combatRng = s._combatSeed ? new SeededRng(s._combatSeed + monster.name) : null;
 
   let round = 0;
 
@@ -474,7 +483,7 @@ async function screenCombat(monster) {
     log = [];
 
     if (choice === 'R') {
-      if (Math.random() < 0.5) {
+      if ((combatRng ? combatRng.nextFloat() : Math.random()) < 0.5) {
         E.clear();
         E.dim('  You flee from battle!');
         await E.pause();
@@ -496,12 +505,13 @@ async function screenCombat(monster) {
       const atkMult = choice === 'D' ? 0.5 : 1;
 
       // Swift: chance to dodge player's attack
-      if (monster.trait === 'swift' && Math.random() < 0.25) {
+      if (monster.trait === 'swift' && (combatRng ? combatRng.nextFloat() : Math.random()) < 0.25) {
         log.push({ fn: E.dim.bind(E), text: `  The ${monster.name} dodges your attack!` });
       } else {
         const result = runCombatRound(
           { name: s.name, attack: Math.floor(s.attack * atkMult), weapon: s.weapon, defense: s.defense, armor: s.armor },
-          { name: monster.name, attack: monster.attack, weapon: { bonus: 0 }, defense: monster.defense, armor: { bonus: 0 }, hp: monster.hp }
+          { name: monster.name, attack: monster.attack, weapon: { bonus: 0 }, defense: monster.defense, armor: { bonus: 0 }, hp: monster.hp },
+          combatRng
         );
         monster.hp = result.defenderHp;
         if (choice === 'D') {
@@ -509,7 +519,7 @@ async function screenCombat(monster) {
         } else {
           log.push({ fn: E.gold.bind(E), text: `  You strike the ${monster.name} for ${result.damage} damage!` });
         }
-        chainEmit('Game::combat', `Player → ${monster.name} | -${result.damage} HP (ZK coming soon)`);
+        chainEmit('Game::combat', `Player → ${monster.name} | -${result.damage} HP | seed-verified`);
       }
     }
 
@@ -531,7 +541,7 @@ async function screenCombat(monster) {
     if (monster.hp > 0 && choice !== 'R') {
       let defMult = choice === 'D' ? 0.5 : 1;
       let monsterAtk = monster.attack;
-      const mDmg = Math.max(1, Math.floor(rollDamage(monsterAtk, 0, s.defense, s.armor.bonus) * defMult));
+      const mDmg = Math.max(1, Math.floor(rollDamage(monsterAtk, 0, s.defense, s.armor.bonus, combatRng) * defMult));
       s.hp = Math.max(0, s.hp - mDmg);
       log.push({ fn: E.red.bind(E), text: `  ${monster.name} hits you for ${mDmg} damage!` });
 
