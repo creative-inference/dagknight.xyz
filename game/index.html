@@ -144,10 +144,24 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
   </div>
 
   <div id="player-list" style="font-family: 'JetBrains Mono', monospace;">
-    <div style="background: #0d1117; border: 1px solid #2a2e38; border-radius: 6px; padding: 1rem 1.5rem;">
+    <div style="background: #0d1117; border: 1px solid #2a2e38; border-radius: 6px; padding: 0.8rem 1rem;">
       <div style="color: #d4a847; font-size: 0.85rem; margin-bottom: 0.5rem;">Active Knights on TN12</div>
       <div id="beacon-list" style="color: #70c7ba; font-size: 0.8rem; line-height: 1.8;">
         <span style="color: #555;">Scanning the BlockDAG...</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="chat-panel" style="font-family: 'JetBrains Mono', monospace;">
+    <div style="background: #0d1117; border: 1px solid #2a2e38; border-radius: 6px; padding: 0.8rem 1rem;">
+      <div style="color: #d4a847; font-size: 0.85rem; margin-bottom: 0.5rem;">Tavern Chat</div>
+      <div id="chat-messages" style="color: #c0c0c0; font-size: 0.75rem; line-height: 1.6; max-height: 200px; overflow-y: auto;">
+        <span style="color: #555;">No messages yet...</span>
+      </div>
+      <div id="chat-input-row" style="display:flex;gap:4px;margin-top:0.5rem;">
+        <input type="text" id="chat-field" placeholder="Say something..." maxlength="200"
+          style="flex:1;background:#1a1e28;color:#70c7ba;border:1px solid #2a2e38;border-radius:3px;padding:0.3rem 0.5rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;outline:none;">
+        <button onclick="sendChat()" style="background:#1a3a2a;color:#70c7ba;border:1px solid #2a5a3a;border-radius:3px;padding:0.3rem 0.6rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;cursor:pointer;">Send</button>
       </div>
     </div>
   </div>
@@ -180,7 +194,10 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
   #game-panel:not(.fullscreen) #game-sidebar {
     display: contents; /* in normal mode, sidebar elements flow normally */
   }
-  #game-panel.fullscreen #chain-log { max-height: 60vh; overflow-y: auto; }
+  #game-panel.fullscreen #chain-log { max-height: 35vh; overflow-y: auto; }
+  #game-panel.fullscreen #chat-panel { flex: 1; }
+  #game-panel.fullscreen #chat-messages { max-height: none !important; flex: 1; overflow-y: auto; }
+  #game-panel.fullscreen #chat-panel > div { display: flex; flex-direction: column; height: 100%; }
 </style>
 
 <script>
@@ -199,6 +216,56 @@ document.addEventListener('keydown', (e) => {
     if (panel.classList.contains('fullscreen')) toggleFullscreen();
   }
 });
+
+// --- Chat ---
+const CHAT_API = 'https://tn12.dagknight.xyz/api/chat';
+let _lastChatTs = 0;
+
+async function refreshChat() {
+  const el = document.getElementById('chat-messages');
+  if (!el) return;
+  try {
+    const resp = await fetch(CHAT_API + '?since=' + _lastChatTs);
+    const msgs = await resp.json();
+    if (!msgs.length && _lastChatTs === 0) return;
+    if (msgs.length) {
+      if (_lastChatTs === 0) el.innerHTML = '';
+      for (const m of msgs) {
+        const div = document.createElement('div');
+        const time = new Date(m.ts).toLocaleTimeString().slice(0, 5);
+        div.innerHTML = `<span style="color:#555;">${time}</span> <span style="color:#d4a847;">${m.name}:</span> ${m.message}`;
+        el.appendChild(div);
+        _lastChatTs = Math.max(_lastChatTs, m.ts);
+      }
+      el.scrollTop = el.scrollHeight;
+    }
+  } catch {}
+}
+
+async function sendChat() {
+  const field = document.getElementById('chat-field');
+  const msg = field.value.trim();
+  if (!msg) return;
+  const s = window._state;
+  if (!s || !s.name || !Wallet.address) return;
+  try {
+    await fetch(CHAT_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: s.name, message: msg, address: Wallet.address }),
+    });
+    field.value = '';
+    refreshChat();
+  } catch {}
+}
+
+document.getElementById('chat-field')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+  e.stopPropagation(); // prevent game input capture
+});
+
+setInterval(refreshChat, 5000);
+setTimeout(refreshChat, 2000);
 </script>
 
 <div class="chain-disclaimer">
