@@ -119,8 +119,12 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
 </section>
 
 <section class="section" style="padding-top: 1rem;">
-  <h2 class="section-title" style="margin-bottom: 1.5rem;">Enter the <span class="teal">Terminal</span></h2>
+  <h2 class="section-title" style="margin-bottom: 1.5rem;">Enter the <span class="teal">Terminal</span>
+    <button id="fullscreen-btn" onclick="toggleFullscreen()" style="float:right;background:#1a1e28;color:#70c7ba;border:1px solid #2a2e38;border-radius:4px;padding:0.3rem 0.8rem;font-family:var(--font-mono);font-size:0.75rem;cursor:pointer;">Fullscreen</button>
+  </h2>
 </section>
+
+<div id="game-panel">
 
 <div id="terminal">
   <div id="terminal-output"></div>
@@ -130,22 +134,72 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
   </div>
 </div>
 
-<div id="chain-log">
-  <div class="chain-header">
-    <span class="chain-title">BlockDAG Activity Log</span>
-    <span class="chain-status"><span class="chain-dot"></span> SIMULATED</span>
+<div id="game-sidebar">
+  <div id="chain-log">
+    <div class="chain-header">
+      <span class="chain-title">BlockDAG Activity Log</span>
+      <span class="chain-status"><span class="chain-dot"></span> SIMULATED</span>
+    </div>
+    <div id="chain-feed"></div>
   </div>
-  <div id="chain-feed"></div>
-</div>
 
-<div id="player-list" style="max-width: 900px; margin: 0 auto 1.5rem; font-family: 'JetBrains Mono', monospace;">
-  <div style="background: #0d1117; border: 1px solid #2a2e38; border-radius: 6px; padding: 1rem 1.5rem;">
-    <div style="color: #d4a847; font-size: 0.85rem; margin-bottom: 0.5rem;">Active Knights on TN12</div>
-    <div id="beacon-list" style="color: #70c7ba; font-size: 0.8rem; line-height: 1.8;">
-      <span style="color: #555;">Scanning the BlockDAG...</span>
+  <div id="player-list" style="font-family: 'JetBrains Mono', monospace;">
+    <div style="background: #0d1117; border: 1px solid #2a2e38; border-radius: 6px; padding: 1rem 1.5rem;">
+      <div style="color: #d4a847; font-size: 0.85rem; margin-bottom: 0.5rem;">Active Knights on TN12</div>
+      <div id="beacon-list" style="color: #70c7ba; font-size: 0.8rem; line-height: 1.8;">
+        <span style="color: #555;">Scanning the BlockDAG...</span>
+      </div>
     </div>
   </div>
 </div>
+
+</div><!-- game-panel -->
+
+<style>
+  #game-panel.fullscreen {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9999; background: #0a0e14;
+    display: grid; grid-template-columns: 1fr 350px;
+    gap: 0; padding: 0; overflow: hidden;
+  }
+  #game-panel.fullscreen #terminal {
+    max-width: none; height: 100vh; border-radius: 0;
+    overflow-y: auto;
+  }
+  #game-panel.fullscreen #game-sidebar {
+    display: flex; flex-direction: column; height: 100vh;
+    overflow-y: auto; border-left: 1px solid #2a2e38;
+    padding: 0.5rem;
+  }
+  #game-panel.fullscreen #chain-log {
+    max-width: none; margin: 0 0 0.5rem; flex: 1;
+  }
+  #game-panel.fullscreen #player-list {
+    max-width: none; margin: 0;
+  }
+  #game-panel:not(.fullscreen) #game-sidebar {
+    display: contents; /* in normal mode, sidebar elements flow normally */
+  }
+  #game-panel.fullscreen #chain-log { max-height: 60vh; overflow-y: auto; }
+</style>
+
+<script>
+function toggleFullscreen() {
+  const panel = document.getElementById('game-panel');
+  const btn = document.getElementById('fullscreen-btn');
+  panel.classList.toggle('fullscreen');
+  btn.textContent = panel.classList.contains('fullscreen') ? 'Exit Fullscreen' : 'Fullscreen';
+  if (panel.classList.contains('fullscreen')) {
+    document.getElementById('input-field')?.focus();
+  }
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const panel = document.getElementById('game-panel');
+    if (panel.classList.contains('fullscreen')) toggleFullscreen();
+  }
+});
+</script>
 
 <div class="chain-disclaimer">
   <strong>Live on TN12:</strong> New players receive 1 test KAS from on-node mining rewards.
