@@ -8,6 +8,48 @@ function chainEmit(action, detail, txId) {
   if (typeof Chain !== 'undefined') Chain.emitCovenantTx(action, detail, txId);
 }
 
+// Verify on-chain state matches localStorage on Continue Quest
+async function verifyChainState(s) {
+  if (!s._onChainHp || !Wallet._kaspa || !Wallet._privateKeyHex) return;
+  const kaspa = Wallet._kaspa;
+  const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+  const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+  const ocHp = s._onChainHp, ocGold = s._onChainGold, ocLevel = s._onChainLevel;
+
+  // Strategy 1: check if UTXO exists at the saved state
+  const addr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
+  const utxo = addr ? await Covenant.findCovenantUtxo(addr) : null;
+  if (utxo) {
+    // Chain matches localStorage — update cached outpoint
+    s._lastPlayerTxId = utxo.outpoint.transactionId;
+    s._lastPlayerAmount = String((utxo.utxoEntry || utxo.entry).amount);
+    s._lastCovenantAddr = addr;
+    // Sync game state to match chain
+    s.hp = ocHp; s.gold = ocGold; s.level = Math.max(s.level, ocLevel);
+    GameState.save(s);
+    chainEmit('Player::verified', `hp=${ocHp} gold=${ocGold} level=${ocLevel}`, utxo.outpoint.transactionId);
+    return;
+  }
+
+  // Strategy 2: check if UTXO exists at current game state (localStorage ahead of _onChain tracking)
+  const gameAddr = Covenant.getCovenantAddress(kaspa, pub, s.hp, s.gold, s.level);
+  if (gameAddr && gameAddr !== addr) {
+    const gameUtxo = await Covenant.findCovenantUtxo(gameAddr);
+    if (gameUtxo) {
+      s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = s.level;
+      s._lastPlayerTxId = gameUtxo.outpoint.transactionId;
+      s._lastPlayerAmount = String((gameUtxo.utxoEntry || gameUtxo.entry).amount);
+      s._lastCovenantAddr = gameAddr;
+      GameState.save(s);
+      chainEmit('Player::verified', `hp=${s.hp} gold=${s.gold} level=${s.level} (synced)`, gameUtxo.outpoint.transactionId);
+      return;
+    }
+  }
+
+  // Not found — chain state unknown, continue with localStorage
+  chainEmit('Player::unverified', `Chain UTXO not found — using localStorage`, false);
+}
+
 // ICC shop purchase: Player + Shop covenants in one atomic tx
 async function shopPurchase(s, price, itemName) {
   if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
@@ -174,12 +216,14 @@ async function screenTitle() {
   const choice = await E.menu(opts);
   if (choice === 'C') {
     window._state = GameState.load();
-    // Load WASM + connect to node for covenant operations
-    Wallet.ensureAddress().then(async () => {
+    // Load WASM + connect to node, verify chain state
+    try {
+      await Wallet.ensureAddress();
       if (Wallet._kaspa && Wallet._privateKeyHex) {
-        try { await Covenant.ensureRpc(Wallet._kaspa); } catch {}
+        await Covenant.ensureRpc(Wallet._kaspa);
+        await verifyChainState(window._state);
       }
-    }).catch(() => {});
+    } catch {}
     await screenTown();
   } else if (choice === 'N') {
     await screenNewGame();
