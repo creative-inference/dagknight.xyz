@@ -22,7 +22,7 @@
   </style>
 </head>
 <body>
-  <div class="dev-banner">TEST MODE — PvP Testing — Open two windows</div>
+  <div class="dev-banner">TEST MODE — KWP-ONLY — No fallback to manual hex code</div>
 
   <div id="game-panel">
     <div id="terminal">
@@ -68,11 +68,33 @@
   </div>
 
   <meta name="kasdk-wasm" content="https://storage.googleapis.com/vprogs-tweet-images/wasm/">
+
+  <!-- KWP: load library + schema BEFORE game scripts -->
+  <script src="https://cdn.jsdelivr.net/gh/creative-inference/kwp@main/dist/kwp.browser.js"></script>
+  <script>
+    // Block until schema is loaded — KWP-only mode, no fallback
+    (async () => {
+      try {
+        window.KWP_WORLD = await KWP.fetchSchema('../game/kwp-schema.json');
+        console.log('[KWP] Schema loaded:', window.KWP_WORLD.entityIds());
+        document.getElementById('kwp-status').textContent = 'KWP ACTIVE — ' + window.KWP_WORLD.entityIds().join(', ');
+        document.getElementById('kwp-status').style.color = '#70c7ba';
+      } catch (e) {
+        console.error('[KWP] FATAL: Schema failed to load:', e);
+        document.getElementById('kwp-status').textContent = 'KWP FAILED: ' + e.message;
+        document.getElementById('kwp-status').style.color = '#ff6b6b';
+      }
+    })();
+  </script>
+
+  <div id="kwp-status" style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:#555;padding:0.2rem;">Loading KWP schema...</div>
+
+  <!-- Game scripts: KWP-only versions (no manual hex fallback) -->
   <script src="../assets/js/game/data.js"></script>
   <script src="../assets/js/game/state.js"></script>
-  <script src="../assets/js/game/combat.js"></script>
+  <script src="../assets/js/game/combat-kwp.js"></script>
   <script src="../assets/js/game/wallet.js"></script>
-  <script src="../assets/js/game/covenant.js"></script>
+  <script src="../assets/js/game/covenant-kwp.js"></script>
   <script src="../assets/js/game/screens.js"></script>
   <script src="../assets/js/game/engine.js"></script>
   <script src="../assets/js/game/chain.js"></script>

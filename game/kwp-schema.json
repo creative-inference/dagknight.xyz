@@ -1,0 +1,236 @@
+{
+  "kwp_version": "2.0",
+  "world": {
+    "id": "dag-gate",
+    "name": "The DAG Gate",
+    "description": "On-chain BBS RPG on Kaspa TN12. Legend of the Red Dragon meets the BlockDAG.",
+    "repository": "https://github.com/creative-inference/dagknight.xyz",
+    "relay_urls": ["wss://tn12.dagknight.xyz/kwp/coordinate"]
+  },
+  "entities": [
+    {
+      "id": "player",
+      "name": "Player",
+      "description": "A player character with persistent on-chain state. Self-preserving covenant UTXO with owner signature validation.",
+      "covenant": {
+        "script_hash": "338d03c957bede6a19a7e66578695da3178af19aec6ce8c3f0b71225af09d062",
+        "logic_hex_offset": 120,
+        "script_size": 160,
+        "version_byte": false
+      },
+      "fields": [
+        {
+          "name": "owner",
+          "type": "bytes32",
+          "hex_offset": 2,
+          "hex_length": 64,
+          "description": "X-only public key of the controlling player"
+        },
+        {
+          "name": "hp",
+          "type": "int64",
+          "hex_offset": 68,
+          "hex_length": 16,
+          "description": "Current hit points (0 = dead, must visit inn)"
+        },
+        {
+          "name": "gold",
+          "type": "int64",
+          "hex_offset": 86,
+          "hex_length": 16,
+          "description": "Gold balance in sompi locked in the covenant UTXO"
+        },
+        {
+          "name": "level",
+          "type": "int64",
+          "hex_offset": 104,
+          "hex_length": 16,
+          "description": "Character level, monotonically increasing"
+        }
+      ],
+      "constraints": {
+        "hp": { "min": 0 },
+        "gold": { "min": 0 },
+        "level": { "min": 1, "monotonic": "increasing" }
+      }
+    },
+    {
+      "id": "shop",
+      "name": "Shop",
+      "description": "Persistent shared shop. No signature required — anyone can purchase. ICC with Player covenant.",
+      "covenant": {
+        "script_hash": "6a455ce1889572d327c4c1ffaa0149e8659d39bb75aa7f6f48c231645f16a96c",
+        "logic_hex_offset": 18,
+        "script_size": 56,
+        "version_byte": false
+      },
+      "fields": [
+        {
+          "name": "gold_collected",
+          "type": "int64",
+          "hex_offset": 2,
+          "hex_length": 16,
+          "description": "Total gold collected by the shop across all purchases"
+        }
+      ],
+      "constraints": {
+        "gold_collected": { "min": 0, "monotonic": "increasing" }
+      }
+    },
+    {
+      "id": "opponent",
+      "name": "Opponent (NPC)",
+      "description": "Public NPC opponent for PvE combat. No signature required. ICC with Player covenant for settlement.",
+      "covenant": {
+        "script_hash": "fcec1d7fb49c7698cdd3e5c52539856df53517a3f208a22549d1d565bc90dc3f",
+        "logic_hex_offset": 36,
+        "script_size": 80,
+        "version_byte": false
+      },
+      "fields": [
+        {
+          "name": "hp",
+          "type": "int64",
+          "hex_offset": 2,
+          "hex_length": 16,
+          "description": "NPC hit points"
+        },
+        {
+          "name": "gold",
+          "type": "int64",
+          "hex_offset": 20,
+          "hex_length": 16,
+          "description": "Gold reward on defeat"
+        }
+      ],
+      "constraints": {
+        "hp": { "min": 0 },
+        "gold": { "min": 0 }
+      }
+    },
+    {
+      "id": "arena",
+      "name": "Arena",
+      "description": "PvP combat session with staked KAS. Both players lock funds; winner takes pot. Timeout enforcement via this.age.",
+      "covenant": {
+        "script_hash": "",
+        "logic_hex_offset": null,
+        "script_size": null,
+        "version_byte": false,
+        "_note": "Arena covenant not yet compiled — PvP settlement is server-coordinated pending KWP-4 migration"
+      },
+      "fields": [
+        {
+          "name": "player_a",
+          "type": "bytes32",
+          "hex_offset": null,
+          "hex_length": 64,
+          "description": "Challenger's x-only public key"
+        },
+        {
+          "name": "player_b",
+          "type": "bytes32",
+          "hex_offset": null,
+          "hex_length": 64,
+          "description": "Opponent's x-only public key"
+        },
+        {
+          "name": "stake",
+          "type": "int64",
+          "hex_offset": null,
+          "hex_length": 16,
+          "description": "KAS staked by each player (sompi)"
+        },
+        {
+          "name": "turn",
+          "type": "uint8",
+          "hex_offset": null,
+          "hex_length": 2,
+          "description": "Whose turn: 0 = player_a, 1 = player_b"
+        },
+        {
+          "name": "round",
+          "type": "uint16",
+          "hex_offset": null,
+          "hex_length": 4,
+          "description": "Current round number"
+        }
+      ],
+      "constraints": {
+        "stake": { "min": 0 },
+        "turn": { "one_of": [0, 1] }
+      }
+    }
+  ],
+  "interactions": [
+    {
+      "id": "forest_combat",
+      "name": "Forest Combat",
+      "description": "Enter the forest, fight a monster. PvE via ICC between Player and Opponent covenants.",
+      "coordination": "none",
+      "inputs": [
+        { "entity": "player", "role": "self" },
+        { "entity": "opponent", "role": "npc", "created": true }
+      ],
+      "outputs": [
+        { "entity": "player", "role": "self", "fields_changed": ["hp", "gold", "level"] },
+        { "entity": "opponent", "role": "npc", "consumed": true }
+      ],
+      "rng": {
+        "source": "block_hash",
+        "method": "tip_hash_at_tx_submission",
+        "algorithm": "xorshift64"
+      }
+    },
+    {
+      "id": "shop_purchase",
+      "name": "Shop Purchase",
+      "description": "Buy an item from the shop. ICC between Player and Shop covenants.",
+      "coordination": "none",
+      "inputs": [
+        { "entity": "player", "role": "buyer" },
+        { "entity": "shop", "role": "shop" }
+      ],
+      "outputs": [
+        { "entity": "player", "role": "buyer", "fields_changed": ["hp", "gold"] },
+        { "entity": "shop", "role": "shop", "fields_changed": ["gold_collected"] }
+      ]
+    },
+    {
+      "id": "inn_rest",
+      "name": "Inn Rest",
+      "description": "Rest at the inn to restore HP. Costs gold. Player covenant self-transition.",
+      "coordination": "none",
+      "inputs": [
+        { "entity": "player", "role": "self" }
+      ],
+      "outputs": [
+        { "entity": "player", "role": "self", "fields_changed": ["hp", "gold"] }
+      ]
+    },
+    {
+      "id": "pvp_challenge",
+      "name": "PvP Challenge",
+      "description": "Challenge another player to arena combat. Multi-step coordination with on-chain settlement.",
+      "coordination": "kwp4",
+      "turn_timeout": 3600,
+      "settlement_timeout": 300,
+      "inputs": [
+        { "entity": "player", "role": "challenger" },
+        { "entity": "player", "role": "opponent" },
+        { "entity": "arena", "role": "session", "created": true }
+      ],
+      "outputs": [
+        { "entity": "player", "role": "challenger", "fields_changed": ["hp", "gold"] },
+        { "entity": "player", "role": "opponent", "fields_changed": ["hp", "gold"] },
+        { "entity": "arena", "role": "session", "consumed": true }
+      ],
+      "rng": {
+        "source": "block_hash",
+        "method": "tip_hash_at_session_start",
+        "algorithm": "xorshift64",
+        "seed_format": "session_id + '_r' + round + '_' + player_pubkey"
+      }
+    }
+  ]
+}

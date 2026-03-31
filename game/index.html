@@ -581,6 +581,18 @@ setInterval(pollChallenges, 10000);
 </div>
 
 <meta name="kasdk-wasm" content="https://storage.googleapis.com/vprogs-tweet-images/wasm/">
+<script src="https://cdn.jsdelivr.net/gh/creative-inference/kwp@main/dist/kwp.browser.js"></script>
+<script>
+  // Load KWP world schema (canonical source: this repo)
+  (async () => {
+    try {
+      window.KWP_WORLD = await KWP.fetchSchema('{{ "/game/kwp-schema.json" | relative_url }}');
+      console.log('[KWP] DAG Gate schema loaded:', window.KWP_WORLD.entityIds());
+    } catch (e) {
+      console.warn('[KWP] Schema fetch failed, running without KWP:', e.message);
+    }
+  })();
+</script>
 <script src="{{ '/assets/js/game/data.js' | relative_url }}?v={{ site.version }}"></script>
 <script src="{{ '/assets/js/game/state.js' | relative_url }}?v={{ site.version }}"></script>
 <script src="{{ '/assets/js/game/combat.js' | relative_url }}?v={{ site.version }}"></script>

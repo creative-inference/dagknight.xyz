@@ -4,6 +4,10 @@
    UTXO lookups via wRPC (getUtxosByAddresses).
    160-byte contract: single update entrypoint with checkSig +
    validateOutputState. Owner = raw x-only pubkey.
+
+   State encoding/decoding powered by Kaspa World Protocol (KWP)
+   when available, with manual hex fallback.
+   Schema: game/kwp-schema.json
    ============================================================ */
 
 const COVENANT_NODE_WS = 'wss://tn12.dagknight.xyz';
@@ -44,6 +48,11 @@ const Covenant = {
   },
 
   buildPlayerScript(pubkeyHex, hp, gold, level) {
+    if (window.KWP_WORLD) {
+      return KWP_WORLD.encodeToScriptHex('player', PLAYER_SCRIPT_HEX, {
+        owner: pubkeyHex, hp: BigInt(hp), gold: BigInt(gold), level: BigInt(level),
+      });
+    }
     let s = PLAYER_SCRIPT_HEX.replaceAll('aa'.repeat(32), pubkeyHex);
     s = s.substring(0, 68) + int64LE(hp) + s.substring(84);
     s = s.substring(0, 86) + int64LE(gold) + s.substring(102);
@@ -94,6 +103,11 @@ const Covenant = {
   // --- Shop Covenant ---
 
   buildShopScript(goldCollected) {
+    if (window.KWP_WORLD) {
+      return KWP_WORLD.encodeToScriptHex('shop', SHOP_SCRIPT_HEX, {
+        gold_collected: BigInt(goldCollected),
+      });
+    }
     let s = SHOP_SCRIPT_HEX;
     s = s.substring(0, 2) + int64LE(goldCollected) + s.substring(18);
     return s;
@@ -108,6 +122,11 @@ const Covenant = {
   // --- Opponent/NPC Covenant ---
 
   buildOpponentScript(hp, gold) {
+    if (window.KWP_WORLD) {
+      return KWP_WORLD.encodeToScriptHex('opponent', OPPONENT_SCRIPT_HEX, {
+        hp: BigInt(hp), gold: BigInt(gold),
+      });
+    }
     let s = OPPONENT_SCRIPT_HEX;
     s = s.substring(0, 2) + int64LE(hp) + s.substring(18);
     s = s.substring(0, 20) + int64LE(gold) + s.substring(36);
@@ -422,7 +441,10 @@ const Covenant = {
   // Decode state from a P2SH script hex (reverse of buildPlayerScript)
   decodePlayerState(scriptHex) {
     if (!scriptHex || scriptHex.length < 120) return null;
-    // owner at hex[2..65], hp at hex[68..83], gold at hex[86..101], level at hex[104..119]
+    if (window.KWP_WORLD) {
+      const s = KWP_WORLD.decodeFromScriptHex('player', scriptHex);
+      return { owner: s.owner, hp: Number(s.hp), gold: Number(s.gold), level: Number(s.level) };
+    }
     const owner = scriptHex.substring(2, 66);
     const hpHex = scriptHex.substring(68, 84);
     const goldHex = scriptHex.substring(86, 102);
@@ -527,6 +549,18 @@ const Covenant = {
     const rpc = await this.ensureRpc(kaspa);
     const rpcResult = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
     return { transactionId: rpcResult.transactionId, playerOutputAmount: String(outputAmount) };
+  },
+
+  // Identify a UTXO's entity type from its script hex (KWP-powered)
+  identifyUtxo(scriptHex) {
+    if (window.KWP_WORLD) return KWP_WORLD.identifyEntity(scriptHex);
+    return null;
+  },
+
+  // Validate a state transition before submitting (KWP-powered)
+  validateTransition(entityId, newState, prevState) {
+    if (window.KWP_WORLD) return KWP_WORLD.validate(entityId, newState, prevState);
+    return [];
   },
 
   // --- Player Registry (via indexer API on our node) ---
