@@ -160,7 +160,7 @@ proofs/                   — RISC Zero guest programs (Phase 2)
 - [x] ~~Does kaspa-wasm support covenant script construction in browser?~~ YES — `@kasdk/web` v0.15.2, `ScriptBuilder` + `Transaction` confirmed working (2026-03-25)
 - [x] ~~TN12 node hosting~~ — REST API at `api-tn12.kaspa.org` is public, includes tx submission
 - [ ] Faucet — need test KAS for Phase 2 (CPU mine or request from team?)
-- [ ] SilverScript stability — compiler API may change before mainnet (May 5, 2026)
+- [ ] SilverScript stability — compiler API may change before mainnet (Covenants++ HF date TBD)
 - [ ] Verifiable randomness — block hash as monster seed fair enough for demo?
 - [ ] Browser wallet extensions — will KasWare add covenant tx support?
 - [ ] SilverScript → script hex — can we compile in browser (WASM compiler) or pre-compile and embed?
