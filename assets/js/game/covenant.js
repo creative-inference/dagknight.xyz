@@ -216,7 +216,7 @@ const Covenant = {
 
     let totalInput = 0n;
     for (const inp of inputs) totalInput += inp.utxo.amount;
-    const shopValue = 100000000n;
+    const shopValue = 20000000n;
     const fee = 500000n;
     if (totalInput < shopValue + fee) throw new Error('Insufficient funds for shop');
     const change = totalInput - shopValue - fee;
@@ -254,9 +254,9 @@ const Covenant = {
 
     let totalInput = 0n;
     for (const inp of inputs) totalInput += inp.utxo.amount;
-    const playerValue = 100000000n;  // 1 KAS each — keeps storage mass under block limit
-    const shopValue = 100000000n;
-    const oppValue = 100000000n;
+    const playerValue = 20000000n;  // 0.2 KAS each — storage mass ~200k, under 500k limit
+    const shopValue = 20000000n;
+    const oppValue = 20000000n;
     const fee = 500000n;
     if (totalInput < playerValue + shopValue + oppValue + fee) throw new Error('Insufficient funds');
     const change = totalInput - playerValue - shopValue - oppValue - fee;
@@ -306,10 +306,10 @@ const Covenant = {
     const covShopSpk = kaspa.ScriptBuilder.fromScript(this.buildShopScript(0)).createPayToScriptHashScript();
     const covOppSpk = kaspa.ScriptBuilder.fromScript(this.buildOpponentScript(50, 100)).createPayToScriptHashScript();
 
-    const playerValue = 100000000n;  // 1 KAS each — keeps storage mass under block limit
-    const shopValue = 100000000n;
-    const oppValue = 100000000n;
-    const walletValue = 100000000n; // 1 KAS to player wallet
+    const playerValue = 20000000n;  // 0.2 KAS each — storage mass ~200k, under 500k limit
+    const shopValue = 20000000n;
+    const oppValue = 20000000n;
+    const walletValue = 20000000n; // 0.2 KAS to player wallet
     const fee = 500000n;
     const total = playerValue + shopValue + oppValue + walletValue + fee;
     if (inputAmt < total) throw new Error('Faucet UTXO too small');

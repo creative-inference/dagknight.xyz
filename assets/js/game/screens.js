@@ -64,7 +64,7 @@ async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
       const playerSpk = kaspa.ScriptBuilder.fromScript(playerScript).createPayToScriptHashScript();
       playerUtxo = {
         outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
-        utxoEntry: { amount: s._lastPlayerAmount || '100000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: playerSpk },
+        utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: playerSpk },
       };
     } else {
       const playerAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
@@ -78,7 +78,7 @@ async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
       const oppSpk = kaspa.ScriptBuilder.fromScript(oppScript).createPayToScriptHashScript();
       oppUtxo = {
         outpoint: { transactionId: s._lastOppTxId, index: s._lastOppIndex ?? 2 },
-        utxoEntry: { amount: s._lastOppAmount || '100000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: oppSpk },
+        utxoEntry: { amount: s._lastOppAmount || '20000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: oppSpk },
       };
     } else {
       const oppAddr = Covenant.getOpponentAddress(kaspa, s._oppHp, s._oppGold);
@@ -264,10 +264,10 @@ async function screenNewGame() {
       );
       const txId = result.transactionId || '';
       s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = 1;
-      s._lastPlayerTxId = txId; s._lastPlayerAmount = '100000000';
+      s._lastPlayerTxId = txId; s._lastPlayerAmount = '20000000';
       s._shopGoldCollected = 0;
       s._oppHp = 50; s._oppGold = 100;
-      s._lastOppTxId = txId; s._lastOppIndex = 2; s._lastOppAmount = '100000000';
+      s._lastOppTxId = txId; s._lastOppIndex = 2; s._lastOppAmount = '20000000';
       Wallet._funded = true; Wallet._save();
       GameState.save(s);
       covSpin.stop('Player + Shop + Arena covenants created on TN12!', 't-cyan');
