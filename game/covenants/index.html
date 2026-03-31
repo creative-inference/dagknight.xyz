@@ -176,15 +176,15 @@ description: "Complete source code and architecture for three interacting covena
 
 <p>
   Character creation deploys all three covenants + funds the player wallet in a single tx
-  directly from on-node mining rewards. Each covenant holds 1 KAS to stay under the
+  directly from on-node mining rewards. Each covenant holds 0.2 KAS to stay under the
   block storage mass limit (small UTXOs incur high storage mass penalties).
 </p>
 <table>
   <tr><th>Output</th><th>Covenant</th><th>Value</th></tr>
-  <tr><td>0</td><td style="color:#70c7ba;">Player</td><td>100,000,000 sompi (1 KAS)</td></tr>
-  <tr><td>1</td><td style="color:#d4a847;">Shop</td><td>100,000,000 sompi (1 KAS)</td></tr>
-  <tr><td>2</td><td style="color:#ff6b6b;">Opponent</td><td>100,000,000 sompi (1 KAS)</td></tr>
-  <tr><td>3</td><td>Wallet</td><td>100,000,000 sompi (1 KAS)</td></tr>
+  <tr><td>0</td><td style="color:#70c7ba;">Player</td><td>20,000,000 sompi (0.2 KAS)</td></tr>
+  <tr><td>1</td><td style="color:#d4a847;">Shop</td><td>20,000,000 sompi (0.2 KAS)</td></tr>
+  <tr><td>2</td><td style="color:#ff6b6b;">Opponent</td><td>20,000,000 sompi (0.2 KAS)</td></tr>
+  <tr><td>3</td><td>Wallet</td><td>20,000,000 sompi (0.2 KAS)</td></tr>
   <tr><td>4</td><td>Change</td><td>remainder to faucet</td></tr>
 </table>
 
@@ -486,7 +486,7 @@ description: "Complete source code and architecture for three interacting covena
 <p>
   No extensions. No MetaMask. The browser generates a random private key,
   derives a TN12 address, and stores it in <code>localStorage</code>.
-  An on-node faucet (funded by our CPU miner's block rewards) sends 4 KAS
+  An on-node faucet (funded by our CPU miner's block rewards) sends 1 KAS
   to deploy 3 covenants + fund the wallet &mdash; all in one transaction.
 </p>
 
@@ -502,7 +502,7 @@ const address = pk.toAddress('testnet-12').toString();
 // Fund + deploy covenants in one tx from on-node mining rewards
 const result = await Covenant.createFromFaucet(kaspa, pk, pubkeyHex, hp, gold, level);
 // Returns: { transactionId: "..." }
-// One tx: coinbase UTXO → 3 covenants (1 KAS each) + wallet (1 KAS) + change</code></pre>
+// One tx: coinbase UTXO → 3 covenants (0.2 KAS each) + wallet (0.2 KAS) + change</code></pre>
 
 <!-- ============================================================ -->
 <h2>Network Layer &mdash; Direct wRPC to TN12 Node</h2>
