@@ -162,12 +162,12 @@ GitHub Pages (static)          TN12 Node
         </p>
       </div>
       <div class="pillar-card">
-        <div class="pillar-icon">&#x1F3AF;</div>
-        <h3>game.sil (Next)</h3>
+        <div class="pillar-icon">&#x2705;</div>
+        <h3>Verifiable Combat (LIVE)</h3>
         <p>
-          <strong>Episodic covenant.</strong> Created when entering the forest, consumed when combat
-          resolves. ICC with Player covenant in a single atomic transaction.
-          Monster selection deterministic from block hash.
+          <strong>Deterministic from BlockDAG.</strong> Combat seed derived from the node's tip block hash.
+          Monster selection and all damage rolls use a seeded xorshift64 PRNG &mdash; deterministic and replayable.
+          Anyone can verify combat outcomes given the seed + player stats. No separate covenant needed.
         </p>
       </div>
     </div>
@@ -236,6 +236,12 @@ GitHub Pages (static)          TN12 Node
       <li style="color: var(--primary);">&#x2705; SilverScript compiler &mdash; <code>player.sil</code> compiled to 160-byte P2SH bytecode via <code>silverc</code></li>
       <li style="color: var(--primary);">&#x2705; Covenant UTXO creation &mdash; Player covenant deployed to TN12 from browser, confirmed on-chain</li>
       <li style="color: var(--primary);">&#x2705; Player onboarding &mdash; on-node faucet funds wallet + deploys 3 covenants in one tx</li>
+      <li style="color: var(--primary);">&#x2705; ICC: Player+Shop &mdash; atomic shop purchases, two covenants in one tx</li>
+      <li style="color: var(--primary);">&#x2705; ICC: Player+Opponent &mdash; atomic PvP combat, two covenants in one tx</li>
+      <li style="color: var(--primary);">&#x2705; Verifiable combat &mdash; seeded PRNG from BlockDAG tip hash, deterministic and replayable</li>
+      <li style="color: var(--primary);">&#x2705; Chain state loading &mdash; Continue Quest verifies Player covenant UTXO on-chain</li>
+      <li style="color: var(--primary);">&#x2705; Player retire &mdash; withdraw covenant KAS back to wallet</li>
+      <li style="color: var(--primary);">&#x2705; Custom CPU miner &mdash; built from same rusty-kaspa codebase, mines blocks with covenant txs</li>
     </ul>
 
     <h2 class="section-title">Open <span class="gold">Questions</span></h2>

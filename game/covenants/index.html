@@ -65,11 +65,13 @@ description: "Complete source code and architecture for three interacting covena
 </div>
 
 <p>
-  Character creation deploys all three covenants in <strong>one transaction</strong> (3 outputs).
+  Character creation deploys all three covenants + funds the wallet in <strong>one transaction</strong> (5 outputs)
+  directly from on-node mining rewards.
   Every game action spends and recreates the relevant covenant UTXOs via
   <code>validateOutputState</code>. Shop purchases and PvP combat use
   <strong>Inter-Covenant Communication</strong> (ICC) &mdash; two covenants updated
-  atomically in a single tx.
+  atomically in a single tx. Combat is <strong>deterministic</strong> &mdash; seeded from the
+  BlockDAG's tip hash via xorshift64 PRNG, replayable and verifiable by anyone.
 </p>
 
 <table>
