@@ -117,6 +117,36 @@ const Chain = {
       this._feed.removeChild(this._feed.firstChild);
     }
   },
+
+  // Poll beacon address for active players
+  async refreshBeacons() {
+    const listEl = document.getElementById('beacon-list');
+    if (!listEl) return;
+    try {
+      if (!Wallet._kaspa || !Covenant._rpc) {
+        // Try connecting
+        if (Wallet._kaspa) await Covenant.ensureRpc(Wallet._kaspa);
+        else return;
+      }
+      const beacons = await Covenant.getActiveBeacons(Wallet._kaspa);
+      if (beacons.length === 0) {
+        listEl.innerHTML = '<span style="color: #555;">No active knights found.</span>';
+        return;
+      }
+      listEl.innerHTML = beacons
+        .sort((a, b) => b.level - a.level)
+        .map((b, i) => {
+          const txShort = b.outpoint?.transactionId?.substring(0, 12) || '?';
+          return `<div style="display:flex;justify-content:space-between;border-bottom:1px solid #1a1e28;padding:2px 0;">` +
+            `<span>Knight #${i + 1}</span>` +
+            `<span style="color:#d4a847;">Level ${b.level}</span>` +
+            `<span style="color:#555;font-size:0.75rem;">${txShort}...</span>` +
+            `</div>`;
+        }).join('');
+    } catch {
+      listEl.innerHTML = '<span style="color: #555;">Beacon scan unavailable.</span>';
+    }
+  },
 };
 
 if (document.readyState === 'loading') {
@@ -124,3 +154,8 @@ if (document.readyState === 'loading') {
 } else {
   Chain.init();
 }
+
+// Poll beacons every 30 seconds
+setInterval(() => Chain.refreshBeacons(), 30000);
+// Initial beacon load after 5 seconds (wait for WASM)
+setTimeout(() => Chain.refreshBeacons(), 5000);

@@ -9,6 +9,11 @@
 const COVENANT_NODE_WS = 'wss://tn12.dagknight.xyz';
 const FAUCET_PRIVATE_KEY = 'e2e890b7101ce497fbfdb97707d3ba3bd8c727b2fa9fae81be80d629ea7581fc';
 
+// Player beacon: game-specific P2SH — shared address for heartbeats
+// Script: OP_PUSH "DAGKNIGHT" OP_DROP OP_TRUE — unique to our game
+// Amount encodes player level (level * 100000 sompi)
+const BEACON_SCRIPT_HEX = '09444147474b4e494748547551'; // push "DAGKNIGHT" OP_DROP OP_TRUE
+
 // Compiled Player covenant (160 bytes, without_selector=true)
 const PLAYER_SCRIPT_HEX = '20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa08140000000000000008000000000000000008010000000000000057795479876958795879ac69567900a269557900a269547978a269537901207c7e577958cd587c7e577958cd587c7e577958cd587c7e7e7e7eb976c97602a00094013c937cbc7eaa02000001aa7e01207e7c7e01877e00c3876975757575757575757551';
 
@@ -526,6 +531,59 @@ const Covenant = {
     const rpc = await this.ensureRpc(kaspa);
     const rpcResult = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
     return { transactionId: rpcResult.transactionId, playerOutputAmount: String(outputAmount) };
+  },
+
+  // --- Player Beacon (heartbeat) ---
+
+  getBeaconAddress(kaspa) {
+    const spk = kaspa.ScriptBuilder.fromScript(BEACON_SCRIPT_HEX).createPayToScriptHashScript();
+    return kaspa.addressFromScriptPublicKey(spk, 'testnet-12')?.toString();
+  },
+
+  // Send a heartbeat beacon — UTXO at shared address, amount encodes level
+  async sendBeacon(kaspa, privateKey, level, walletUtxos) {
+    const walletSpk = kaspa.payToAddressScript(privateKey.toAddress('testnet-12'));
+    const beaconSpk = kaspa.ScriptBuilder.fromScript(BEACON_SCRIPT_HEX).createPayToScriptHashScript();
+
+    const inputs = walletUtxos.filter(u => BigInt(u.utxoEntry?.amount || 0) > 0n).map(u => ({
+      previousOutpoint: u.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+      utxo: { outpoint: u.outpoint, amount: BigInt(u.utxoEntry.amount), scriptPublicKey: walletSpk, blockDaaScore: BigInt(u.utxoEntry.blockDaaScore || 0), isCoinbase: false },
+    }));
+
+    let totalInput = 0n;
+    for (const inp of inputs) totalInput += inp.utxo.amount;
+    const beaconAmount = BigInt(Math.max(1, level)) * 5000000n; // level encoded in amount (0.05 KAS per level)
+    const fee = 10000n;
+    if (totalInput < beaconAmount + fee) return null;
+    const change = totalInput - beaconAmount - fee;
+
+    const outputs = [{ value: beaconAmount, scriptPublicKey: beaconSpk }];
+    if (change > 0n) outputs.push({ value: change, scriptPublicKey: walletSpk });
+
+    const tx = new kaspa.Transaction({
+      version: 0, inputs, outputs,
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const signedTx = kaspa.signTransaction(tx, [privateKey], false);
+    const rpc = await this.ensureRpc(kaspa);
+    const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+    return { transactionId: result.transactionId, beaconAmount: String(beaconAmount) };
+  },
+
+  // Get all active player beacons
+  async getActiveBeacons(kaspa) {
+    const addr = this.getBeaconAddress(kaspa);
+    if (!addr) return [];
+    const utxos = await this.getUtxos(addr);
+    return utxos.map(u => {
+      const amount = Number((u.utxoEntry || u.entry || u).amount);
+      return {
+        level: Math.floor(amount / 5000000),
+        amount,
+        outpoint: u.outpoint,
+      };
+    });
   },
 
   // Retire: spend Player covenant, send KAS back to wallet
