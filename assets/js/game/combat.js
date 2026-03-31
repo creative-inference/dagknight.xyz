@@ -7,9 +7,13 @@
 // Seeded PRNG (xorshift64) — deterministic from a 64-bit seed
 class SeededRng {
   constructor(seed) {
-    // Convert hex string or number to BigInt state
+    // Convert any string to a BigInt state via simple hash
     if (typeof seed === 'string') {
-      this.state = BigInt('0x' + seed.substring(0, 16)) || 1n;
+      let h = 0n;
+      for (let i = 0; i < seed.length; i++) {
+        h = ((h << 5n) - h + BigInt(seed.charCodeAt(i))) & 0xFFFFFFFFFFFFFFFFn;
+      }
+      this.state = h || 1n;
     } else {
       this.state = BigInt(seed) || 1n;
     }
