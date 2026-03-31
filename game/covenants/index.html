@@ -1,0 +1,561 @@
+---
+layout: default
+title: "Covenant Source — The DAG Gate on Kaspa TN12"
+description: "Complete source code and architecture for three interacting covenants on Kaspa Testnet-12"
+---
+
+<style>
+  .cov-page { max-width: 900px; margin: 0 auto; padding: 0 1rem; }
+  .cov-page h2 { color: var(--accent-gold); font-family: var(--font-mono); margin-top: 3rem; }
+  .cov-page h3 { color: var(--primary); font-family: var(--font-mono); margin-top: 2rem; }
+  .cov-page p, .cov-page li { color: var(--text); line-height: 1.8; }
+  .cov-page code { background: #1a1e28; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
+  .cov-page pre { background: #0a0e14; border: 1px solid #2a2e38; border-radius: 6px; padding: 1.2rem; overflow-x: auto; font-size: 0.82rem; line-height: 1.6; margin: 1rem 0 1.5rem; }
+  .cov-page pre code { background: none; padding: 0; }
+  .cov-page .label { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 3px; font-size: 0.75rem; font-family: var(--font-mono); margin-bottom: 0.5rem; }
+  .cov-page .label-player { background: #1a3a2a; color: #70c7ba; border: 1px solid #2a5a3a; }
+  .cov-page .label-shop { background: #3a2a1a; color: #d4a847; border: 1px solid #5a3a2a; }
+  .cov-page .label-opp { background: #3a1a1a; color: #ff6b6b; border: 1px solid #5a2a2a; }
+  .cov-page .label-icc { background: #1a1a3a; color: #8888ff; border: 1px solid #2a2a5a; }
+  .cov-page .arch-box { background: #0d1117; border: 1px solid #2a2e38; border-radius: 8px; padding: 1.5rem; margin: 1.5rem 0; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.8; color: var(--text-dim); }
+  .cov-page .arch-box strong { color: var(--primary); }
+  .cov-page .note { background: #1a1e28; border-left: 3px solid var(--accent-gold); padding: 1rem 1.2rem; margin: 1.5rem 0; font-size: 0.9rem; color: var(--text-dim); }
+  .cov-page table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  .cov-page th { background: #1a1e28; color: var(--accent-gold); text-align: left; padding: 0.6rem; font-family: var(--font-mono); }
+  .cov-page td { border-bottom: 1px solid #1a1e28; padding: 0.6rem; color: var(--text-dim); }
+</style>
+
+<div class="hero" style="padding: 4rem 2rem 2rem;">
+  <div class="hero-content">
+    <h1>Covenant <span class="highlight">Source Code</span></h1>
+    <p class="subtitle">Three covenants. One atomic game. Zero servers.</p>
+    <p class="tagline">
+      Complete source code for the Player, Shop, and Opponent covenants
+      running on Kaspa Testnet-12. Every line is production code from
+      <a href="{{ '/game/' | relative_url }}" style="color: var(--primary);">The DAG Gate</a>.
+    </p>
+  </div>
+</div>
+
+<section class="section">
+<div class="cov-page">
+
+<!-- ============================================================ -->
+<h2>Architecture Overview</h2>
+
+<div class="arch-box">
+<pre style="background:none;border:none;padding:0;margin:0;color:var(--text-dim);">
+                        Browser (static HTML + WASM)
+                                  |
+                          wRPC WebSocket
+                                  |
+                        TN12 Kaspa Node
+                                  |
+                    +---------+---+---+---------+
+                    |         |       |         |
+              [Player UTXO] [Shop UTXO] [Opponent UTXO]
+               160 bytes     56 bytes    80 bytes
+                    |         |       |         |
+                    |    ICC: atomic tx    |    |
+                    +----[2-in, 2-out]----+    |
+                    |                          |
+                    +----[2-in, 2-out]---------+
+                         ICC: PvP combat
+</pre>
+</div>
+
+<p>
+  Character creation deploys all three covenants in <strong>one transaction</strong> (3 outputs).
+  Every game action spends and recreates the relevant covenant UTXOs via
+  <code>validateOutputState</code>. Shop purchases and PvP combat use
+  <strong>Inter-Covenant Communication</strong> (ICC) &mdash; two covenants updated
+  atomically in a single tx.
+</p>
+
+<table>
+  <tr><th>Covenant</th><th>Size</th><th>State Fields</th><th>Auth</th><th>Validates</th></tr>
+  <tr><td style="color:#70c7ba;">Player</td><td>160 bytes</td><td>owner, hp, gold, level</td><td>Schnorr sig</td><td>output 0</td></tr>
+  <tr><td style="color:#d4a847;">Shop</td><td>56 bytes</td><td>gold_collected</td><td>None (public)</td><td>output 1</td></tr>
+  <tr><td style="color:#ff6b6b;">Opponent</td><td>80 bytes</td><td>hp, gold</td><td>None (public)</td><td>output 1</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>The Compiled Scripts</h2>
+
+<p>
+  These hex strings are the compiled SilverScript output. Each is a complete Kaspa script
+  that enforces state transitions via <code>validateOutputState</code>. The placeholder
+  bytes (e.g. <code>aa...aa</code> for the owner pubkey, <code>14000000...</code> for HP)
+  are patched at runtime with the actual state values.
+</p>
+
+<span class="label label-player">PLAYER &mdash; 160 bytes</span>
+<pre><code>20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+08140000000000000008000000000000000008010000000000000057795479876958
+795879ac69567900a269557900a269547978a269537901207c7e577958cd587c7e
+577958cd587c7e577958cd587c7e7e7e7eb976c97602a00094013c937cbc7eaa02
+000001aa7e01207e7c7e01877e00c3876975757575757575757551</code></pre>
+
+<div class="note">
+  <strong>Player script layout:</strong><br>
+  Bytes 0&ndash;33: owner x-only pubkey (32 bytes + push opcode)<br>
+  Bytes 34&ndash;42: HP (int64 little-endian)<br>
+  Bytes 43&ndash;51: Gold (int64 little-endian)<br>
+  Bytes 52&ndash;60: Level (int64 little-endian)<br>
+  Bytes 61&ndash;160: checkSig + validateOutputState logic
+</div>
+
+<span class="label label-shop">SHOP &mdash; 56 bytes</span>
+<pre><code>0800000000000000007800a0697652799358cd587c7eb976c9
+7601389459937cbc7eaa02000001aa7e01207e7c7e01877e51c38769757551</code></pre>
+
+<div class="note">
+  <strong>Shop script layout:</strong><br>
+  Bytes 0&ndash;9: gold_collected (int64 little-endian)<br>
+  Bytes 10&ndash;56: validates output 1, no signature required<br>
+  Anyone can call <code>sell(payment)</code> &mdash; the covenant only checks that
+  <code>new_gold_collected == old_gold_collected + payment</code>.
+</div>
+
+<span class="label label-opp">OPPONENT &mdash; 80 bytes</span>
+<pre><code>083200000000000000086400000000000000537900a269527900a269
+537958cd587c7e537958cd587c7e7eb976c9760150940112937cbc7eaa
+02000001aa7e01207e7c7e01877e51c387697575757551</code></pre>
+
+<div class="note">
+  <strong>Opponent script layout:</strong><br>
+  Bytes 0&ndash;9: HP (int64 LE, default 50)<br>
+  Bytes 10&ndash;18: Gold (int64 LE, default 100)<br>
+  Bytes 19&ndash;80: validates output 1, no signature<br>
+  Public NPC &mdash; anyone can call <code>fight(newHp, newGold)</code>.
+</div>
+
+<!-- ============================================================ -->
+<h2>Script Building &mdash; Runtime State Patching</h2>
+
+<p>
+  The compiled scripts are templates. At runtime, we patch in the actual state values
+  using simple hex string replacement. No recompilation, no AST manipulation &mdash;
+  just splice the int64LE bytes at known offsets.
+</p>
+
+<span class="label label-player">PLAYER</span>
+<pre><code class="language-js">buildPlayerScript(pubkeyHex, hp, gold, level) {
+  let s = PLAYER_SCRIPT_HEX.replaceAll('aa'.repeat(32), pubkeyHex);
+  s = s.substring(0, 68) + int64LE(hp)    + s.substring(84);
+  s = s.substring(0, 86) + int64LE(gold)  + s.substring(102);
+  s = s.substring(0, 104) + int64LE(level) + s.substring(120);
+  return s;
+}</code></pre>
+
+<span class="label label-shop">SHOP</span>
+<pre><code class="language-js">buildShopScript(goldCollected) {
+  let s = SHOP_SCRIPT_HEX;
+  s = s.substring(0, 2) + int64LE(goldCollected) + s.substring(18);
+  return s;
+}</code></pre>
+
+<span class="label label-opp">OPPONENT</span>
+<pre><code class="language-js">buildOpponentScript(hp, gold) {
+  let s = OPPONENT_SCRIPT_HEX;
+  s = s.substring(0, 2) + int64LE(hp)   + s.substring(18);
+  s = s.substring(0, 20) + int64LE(gold) + s.substring(36);
+  return s;
+}</code></pre>
+
+<p>The <code>int64LE</code> helper converts a number to 8-byte little-endian hex:</p>
+<pre><code class="language-js">function int64LE(n) {
+  const buf = new ArrayBuffer(8);
+  new DataView(buf).setBigInt64(0, BigInt(n), true);
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}</code></pre>
+
+<!-- ============================================================ -->
+<h2>Deployment &mdash; Three Covenants, One Transaction</h2>
+
+<p>
+  Character creation deploys Player + Shop + Opponent in a single tx.
+  The faucet provides 1 KAS (100M sompi). The tx allocates:
+</p>
+<table>
+  <tr><th>Output</th><th>Covenant</th><th>Value</th></tr>
+  <tr><td>0</td><td style="color:#70c7ba;">Player</td><td>10,000,000 sompi (0.1 KAS)</td></tr>
+  <tr><td>1</td><td style="color:#d4a847;">Shop</td><td>5,000,000 sompi (0.05 KAS)</td></tr>
+  <tr><td>2</td><td style="color:#ff6b6b;">Opponent</td><td>5,000,000 sompi (0.05 KAS)</td></tr>
+  <tr><td>3</td><td>Change</td><td>~79,990,000 sompi</td></tr>
+</table>
+
+<pre><code class="language-js">async createPlayerAndShop(kaspa, privateKey, pubkeyHex, hp, gold, level, fundingUtxos) {
+  const playerScript = this.buildPlayerScript(pubkeyHex, hp, gold, level);
+  const playerSpk = kaspa.ScriptBuilder.fromScript(playerScript)
+    .createPayToScriptHashScript();
+  const shopScript = this.buildShopScript(0);
+  const shopSpk = kaspa.ScriptBuilder.fromScript(shopScript)
+    .createPayToScriptHashScript();
+  const oppScript = this.buildOpponentScript(50, 100);
+  const oppSpk = kaspa.ScriptBuilder.fromScript(oppScript)
+    .createPayToScriptHashScript();
+  const changeSpk = kaspa.payToAddressScript(privateKey.toAddress('testnet-12'));
+
+  // ... gather inputs, calculate totals ...
+
+  const tx = new kaspa.Transaction({
+    version: 0,
+    inputs,
+    outputs: [
+      { value: 10000000n, scriptPublicKey: playerSpk },   // Player
+      { value: 5000000n,  scriptPublicKey: shopSpk },     // Shop
+      { value: 5000000n,  scriptPublicKey: oppSpk },      // Opponent
+      { value: change,    scriptPublicKey: changeSpk },   // Change
+    ],
+    lockTime: 0n,
+    subnetworkId: '0000000000000000000000000000000000000000',
+    gas: 0n, payload: '',
+  });
+
+  const signedTx = kaspa.signTransaction(tx, [privateKey], false);
+  const rpc = await this.ensureRpc(kaspa);
+  return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+}</code></pre>
+
+<!-- ============================================================ -->
+<h2>State Updates &mdash; Spend and Recreate</h2>
+
+<p>
+  Every game action (combat, level-up, inn rest) calls <code>updatePlayerUtxo</code>.
+  This spends the current covenant UTXO and creates a new one with updated state.
+  The on-chain script enforces that the output script matches the expected new state
+  via <code>validateOutputState</code>.
+</p>
+
+<span class="label label-player">PLAYER::UPDATE</span>
+<pre><code class="language-js">async updatePlayerUtxo(kaspa, privateKey, pubkeyHex,
+  curHp, curGold, curLevel,
+  newHp, newGold, newLevel,
+  covenantUtxo
+) {
+  const currentScript = this.buildPlayerScript(pubkeyHex, curHp, curGold, curLevel);
+  const newScript     = this.buildPlayerScript(pubkeyHex, newHp, newGold, newLevel);
+  const newSpk     = kaspa.ScriptBuilder.fromScript(newScript).createPayToScriptHashScript();
+  const currentSpk = kaspa.ScriptBuilder.fromScript(currentScript).createPayToScriptHashScript();
+
+  const covenantValue = BigInt(covenantUtxo.utxoEntry.amount);
+  const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
+
+  // Step 1: Build unsigned tx for signing
+  const unsignedTx = new kaspa.Transaction({
+    version: 0,
+    inputs: [{
+      previousOutpoint: covenantUtxo.outpoint,
+      signatureScript: '', sequence: 0n, sigOpCount: 1,
+      utxo: { amount: covenantValue, scriptPublicKey: currentSpk, ... },
+    }],
+    outputs: [{ value: covenantValue - fee, scriptPublicKey: newSpk }],
+    ...
+  });
+
+  // Step 2: Create Schnorr signature over the tx
+  const sigHex = kaspa.createInputSignature(unsignedTx, 0, privateKey);
+
+  // Step 3: Build sig_script: &lt;sig&gt; &lt;pubkey&gt; &lt;newHp&gt; &lt;newGold&gt; &lt;newLevel&gt; &lt;redeem&gt;
+  const argSb = new kaspa.ScriptBuilder();
+  argSb.addData(pubBytes);
+  argSb.addI64(BigInt(newHp));
+  argSb.addI64(BigInt(newGold));
+  argSb.addI64(BigInt(newLevel));
+
+  const redeemSb = new kaspa.ScriptBuilder();
+  redeemSb.addData(currentScriptBytes);
+  const sigScript = sigHex + argSb.toString() + redeemSb.toString();
+
+  // Step 4: Submit with sig_script
+  const signedTx = new kaspa.Transaction({
+    inputs: [{ previousOutpoint, signatureScript: sigScript, ... }],
+    outputs: [{ value: covenantValue - fee, scriptPublicKey: newSpk }],
+    ...
+  });
+
+  return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+}</code></pre>
+
+<div class="note">
+  <strong>The sig_script anatomy for P2SH covenant spending:</strong><br><br>
+  <code>&lt;schnorr_sig&gt; &lt;pubkey&gt; &lt;arg1&gt; &lt;arg2&gt; ... &lt;redeem_script&gt;</code><br><br>
+  The redeem script is the <em>current</em> compiled covenant (with current state).
+  The node hashes it, confirms it matches the P2SH address being spent, then
+  executes the script. The script uses <code>validateOutputState</code> to verify
+  that output 0 contains the new state built from the provided arguments.
+</div>
+
+<!-- ============================================================ -->
+<h2>ICC: Shop Purchase (Player + Shop Atomic Tx)</h2>
+
+<p>
+  When a player buys an item, both the Player and Shop covenants must update atomically.
+  The Player's gold decreases; the Shop's <code>gold_collected</code> increases by the
+  payment amount. One transaction, two P2SH inputs, two P2SH outputs.
+</p>
+
+<div class="arch-box">
+<pre style="background:none;border:none;padding:0;margin:0;color:var(--text-dim);">
+  <strong>Input 0:</strong> Player covenant (validates output 0)
+    sig_script: &lt;sig&gt; &lt;pubkey&gt; &lt;hp&gt; &lt;newGold&gt; &lt;level&gt; &lt;player_redeem&gt;
+
+  <strong>Input 1:</strong> Shop covenant (validates output 1)
+    sig_script: &lt;payment&gt; &lt;shop_redeem&gt;
+
+  <strong>Output 0:</strong> New Player UTXO (gold decreased)
+  <strong>Output 1:</strong> New Shop UTXO (gold_collected increased)
+</pre>
+</div>
+
+<span class="label label-icc">ICC: PURCHASE</span>
+<pre><code class="language-js">async purchaseFromShop(kaspa, privateKey, pubkeyHex,
+  curHp, curGold, curLevel, newGold, payment,
+  playerUtxo, shopUtxo, shopGoldCollected
+) {
+  // Build current and new scripts for both covenants
+  const playerScript    = this.buildPlayerScript(pubkeyHex, curHp, curGold, curLevel);
+  const newPlayerScript = this.buildPlayerScript(pubkeyHex, curHp, newGold, curLevel);
+  const shopScript      = this.buildShopScript(shopGoldCollected);
+  const newShopScript   = this.buildShopScript(shopGoldCollected + payment);
+
+  // Two inputs, two outputs
+  const unsignedTx = new kaspa.Transaction({
+    inputs: [
+      { previousOutpoint: playerUtxo.outpoint, sigOpCount: 1, ... },  // Player
+      { previousOutpoint: shopUtxo.outpoint,   sigOpCount: 0, ... },  // Shop (no sig)
+    ],
+    outputs: [
+      { value: playerAmt - fee, scriptPublicKey: newPlayerSpk },  // output 0
+      { value: shopAmt,         scriptPublicKey: newShopSpk },    // output 1
+    ],
+  });
+
+  // Player sig_script (input 0): signed by owner
+  const sigHex = kaspa.createInputSignature(unsignedTx, 0, privateKey);
+  const playerSigScript = sigHex
+    + serialize(pubkey, curHp, newGold, curLevel)
+    + serialize(playerRedeemScript);
+
+  // Shop sig_script (input 1): no signature, just args
+  const shopSigScript = serialize(payment) + serialize(shopRedeemScript);
+
+  // Submit atomic tx
+  return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+}</code></pre>
+
+<div class="note">
+  <strong>Why this is trustless:</strong> The Player covenant at input 0 validates that output 0
+  contains the correct new player state. The Shop covenant at input 1 validates that output 1
+  contains the correct new shop state. Neither covenant trusts the other &mdash; each independently
+  verifies its own output. The atomicity of the transaction guarantees both succeed or both fail.
+</div>
+
+<!-- ============================================================ -->
+<h2>ICC: PvP Combat (Player + Opponent Atomic Tx)</h2>
+
+<p>
+  PvP combat follows the same ICC pattern. The Player covenant validates output 0
+  (new player HP/gold after combat). The Opponent covenant validates output 1
+  (new opponent HP/gold). The outcome of the fight determines the new state values.
+</p>
+
+<div class="arch-box">
+<pre style="background:none;border:none;padding:0;margin:0;color:var(--text-dim);">
+  <strong>Input 0:</strong> Player covenant (validates output 0)
+    sig_script: &lt;sig&gt; &lt;pubkey&gt; &lt;newHp&gt; &lt;newGold&gt; &lt;level&gt; &lt;player_redeem&gt;
+
+  <strong>Input 1:</strong> Opponent covenant (validates output 1)
+    sig_script: &lt;newOppHp&gt; &lt;newOppGold&gt; &lt;opponent_redeem&gt;
+
+  <strong>Output 0:</strong> New Player UTXO (HP/gold changed by combat)
+  <strong>Output 1:</strong> New Opponent UTXO (HP/gold changed by combat)
+</pre>
+</div>
+
+<span class="label label-icc">ICC: PVP COMBAT</span>
+<pre><code class="language-js">async pvpFight(kaspa, privateKey, pubkeyHex,
+  curHp, curGold, curLevel,
+  newPlayerHp, newPlayerGold,
+  oppHp, oppGold, newOppHp, newOppGold,
+  playerUtxo, oppUtxo
+) {
+  // Player sig_script: signed, validates output 0
+  const sigHex = kaspa.createInputSignature(unsignedTx, 0, privateKey);
+  const playerSigScript = sigHex
+    + serialize(pubkey, newPlayerHp, newPlayerGold, curLevel)
+    + serialize(playerRedeemScript);
+
+  // Opponent sig_script: unsigned (public NPC), validates output 1
+  const oppSigScript = serialize(newOppHp, newOppGold)
+    + serialize(oppRedeemScript);
+
+  const signedTx = new kaspa.Transaction({
+    inputs: [
+      { previousOutpoint: playerUtxo.outpoint, signatureScript: playerSigScript },
+      { previousOutpoint: oppUtxo.outpoint,    signatureScript: oppSigScript },
+    ],
+    outputs: [
+      { value: playerAmt - fee, scriptPublicKey: newPlayerSpk },
+      { value: oppAmt,          scriptPublicKey: newOppSpk },
+    ],
+  });
+
+  return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+}</code></pre>
+
+<!-- ============================================================ -->
+<h2>Game Integration &mdash; How Actions Trigger Chain Updates</h2>
+
+<p>
+  The game runs in the browser. Every meaningful action calls one of three functions:
+</p>
+
+<table>
+  <tr><th>Game Action</th><th>Chain Function</th><th>Type</th></tr>
+  <tr><td>Forest combat win/lose</td><td><code>syncToChain()</code></td><td>Player update</td></tr>
+  <tr><td>Inn rest (heal)</td><td><code>syncToChain()</code></td><td>Player update</td></tr>
+  <tr><td>Level up</td><td><code>syncToChain()</code></td><td>Player update</td></tr>
+  <tr><td>Death / respawn</td><td><code>syncToChain()</code></td><td>Player update</td></tr>
+  <tr><td>Buy weapon/armor</td><td><code>shopPurchase()</code></td><td>ICC: Player+Shop</td></tr>
+  <tr><td>PvP arena fight</td><td><code>pvpOnChain()</code></td><td>ICC: Player+Opponent</td></tr>
+  <tr><td>PvP forfeit</td><td><code>syncToChain()</code></td><td>Player update</td></tr>
+</table>
+
+<span class="label label-player">SYNC TO CHAIN</span>
+<pre><code class="language-js">async function syncToChain(s, action) {
+  if (!Wallet._kaspa || !Wallet._privateKeyHex || !Wallet.funded) return;
+  const ocHp = s._onChainHp;
+  const ocGold = s._onChainGold;
+  const ocLevel = s._onChainLevel;
+  if (ocHp === undefined) return;
+
+  // Skip if state hasn't changed
+  if (s.hp === ocHp && s.gold === ocGold && s.level === ocLevel) return;
+
+  // Prevent concurrent syncs
+  if (syncToChain._busy) return;
+  syncToChain._busy = true;
+
+  try {
+    const kaspa = Wallet._kaspa;
+    const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+    const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+
+    // Find the current covenant UTXO
+    const covAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
+    let covUtxo = covAddr ? await Covenant.findCovenantUtxo(covAddr) : null;
+
+    // Fallback: use cached outpoint if UTXO not indexed yet
+    if (!covUtxo && s._lastPlayerTxId) {
+      covUtxo = buildCachedUtxo(s, kaspa, pub, ocHp, ocGold, ocLevel);
+    }
+    if (!covUtxo) return;
+
+    // Spend current UTXO, create new one with updated state
+    const result = await Covenant.updatePlayerUtxo(
+      kaspa, pk, pub,
+      ocHp, ocGold, ocLevel,    // current on-chain state
+      s.hp, s.gold, s.level,    // new state from game
+      covUtxo
+    );
+
+    // Track the new on-chain state
+    s._onChainHp = s.hp;
+    s._onChainGold = s.gold;
+    s._onChainLevel = s.level;
+    s._lastPlayerTxId = result.transactionId;
+    s._lastPlayerAmount = result.playerOutputAmount;
+    GameState.save(s);
+
+    chainEmit('Player::update', action, result.transactionId);
+  } catch (err) {
+    console.log('Chain sync skipped:', err.message);
+  } finally {
+    syncToChain._busy = false;
+  }
+}</code></pre>
+
+<!-- ============================================================ -->
+<h2>Wallet &mdash; Browser-Native Key Management</h2>
+
+<p>
+  No extensions. No MetaMask. The browser generates a random private key,
+  derives a TN12 address, and stores it in <code>localStorage</code>.
+  The faucet Cloud Function sends 1 test KAS to fund covenant creation.
+</p>
+
+<pre><code class="language-js">// Generate keypair
+const bytes = crypto.getRandomValues(new Uint8Array(32));
+const privateKeyHex = Array.from(bytes)
+  .map(b => b.toString(16).padStart(2, '0')).join('');
+
+// Derive address using @kasdk/web WASM
+const pk = new kaspa.PrivateKey(privateKeyHex);
+const address = pk.toAddress('testnet-12').toString();
+
+// Fund via Cloud Function faucet
+const resp = await fetch(FAUCET_URL, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ address }),
+});
+// Returns: { txId: "...", amount: 100000000 }</code></pre>
+
+<!-- ============================================================ -->
+<h2>Network Layer &mdash; Direct wRPC to TN12 Node</h2>
+
+<p>
+  The game connects directly to a Kaspa TN12 node via WebSocket RPC (wRPC).
+  No REST API, no middleware, no proxy. The same node that validates blocks
+  serves the game's UTXO queries and transaction submissions.
+</p>
+
+<pre><code class="language-js">const COVENANT_NODE_WS = 'wss://tn12.dagknight.xyz';
+
+async ensureRpc(kaspa) {
+  if (this._rpc) return this._rpc;
+  const rpc = new kaspa.RpcClient({ url: COVENANT_NODE_WS });
+  await rpc.connect();
+  this._rpc = rpc;
+  return rpc;
+}
+
+// UTXO lookup
+async findCovenantUtxo(address) {
+  const resp = await rpc.getUtxosByAddresses({ addresses: [address] });
+  const entries = resp.entries || resp || [];
+  return entries.length > 0 ? entries[0] : null;
+}
+
+// Transaction submission
+await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });</code></pre>
+
+<!-- ============================================================ -->
+<h2>The Full Stack</h2>
+
+<div class="arch-box">
+<pre style="background:none;border:none;padding:0;margin:0;color:var(--text-dim);">
+<strong>Frontend:</strong>     Static HTML/CSS/JS on GitHub Pages
+<strong>WASM SDK:</strong>     @kasdk/web (tx building, signing, address derivation)
+<strong>Transport:</strong>    WebSocket (wRPC) to TN12 node
+<strong>Node:</strong>         rusty-kaspa (tn12 branch) on DigitalOcean
+<strong>Covenants:</strong>    SilverScript &rarr; compiled bytecode &rarr; P2SH UTXOs
+<strong>State:</strong>        UTXO chain &mdash; each spend creates next state
+<strong>Auth:</strong>         Schnorr signatures (player actions only)
+<strong>ICC:</strong>          Multi-input P2SH txs (shop, PvP)
+<strong>Faucet:</strong>       Google Cloud Function + Secret Manager
+<strong>Backend:</strong>      None.
+</pre>
+</div>
+
+<div style="display: flex; gap: 1rem; justify-content: center; margin-top: 2.5rem; flex-wrap: wrap;">
+  <a href="{{ '/game/' | relative_url }}" class="btn btn-primary" style="text-decoration: none;">Play The DAG Gate</a>
+  <a href="{{ '/game/innovation/' | relative_url }}" class="btn btn-outline" style="text-decoration: none;">The Covenant Forge</a>
+  <a href="{{ '/game/plan/' | relative_url }}" class="btn btn-outline" style="text-decoration: none;">Integration Plan</a>
+</div>
+
+</div>
+</section>
