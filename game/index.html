@@ -120,12 +120,11 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
   <h2 class="section-title" style="margin-bottom: 1.5rem;">Enter the <span class="teal">Terminal</span></h2>
 </section>
 
-<!-- MAINTENANCE: restore terminal when node is back -->
-<div style="background: #0a0e14; border: 1px solid #d4a847; border-radius: 8px; padding: 3rem 2rem; text-align: center; font-family: 'JetBrains Mono', monospace; max-width: 900px; margin: 0 auto 2rem;">
-  <div style="color: #d4a847; font-size: 1.2rem; margin-bottom: 1.5rem;">=== TN12 NODE MAINTENANCE ===</div>
-  <div style="color: #70c7ba; font-size: 0.9rem; line-height: 2;">
-    Resyncing TN12 node. New games temporarily unavailable.<br><br>
-    <span style="color: #888;">The DAG Gate will return shortly.</span>
+<div id="terminal">
+  <div id="terminal-output"></div>
+  <div id="terminal-input" class="hidden">
+    <span class="prompt-char">&gt;</span>
+    <input type="text" id="input-field" autocomplete="off" spellcheck="false">
   </div>
 </div>
 
