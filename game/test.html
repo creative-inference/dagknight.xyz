@@ -169,21 +169,47 @@
     } catch (e) { console.log('Challenge error:', e); }
   }
 
+  const _seenChallenges = new Set();
+  const _completedChallenges = new Set();
+
   async function pollChallenges() {
     if (!Wallet.address || !window._state) return;
     try {
       const resp = await fetch(PVP_API + '/challenges?addr=' + Wallet.address);
       const challenges = await resp.json();
       for (const c of challenges) {
-        if (c.status === 'pending' && c.toAddr === Wallet.address) {
-          const accept = confirm(c.fromName + ' (Lv' + c.fromLevel + ') challenges you! Accept?');
-          if (accept) await acceptChallenge(c);
+        if (c.status === 'pending' && c.toAddr === Wallet.address && !_seenChallenges.has(c.id)) {
+          _seenChallenges.add(c.id);
+          showChallengePrompt(c);
         }
-        if (c.status === 'accepted' && c.fromAddr === Wallet.address) {
+        if (c.status === 'accepted' && c.fromAddr === Wallet.address && !_completedChallenges.has(c.id)) {
+          _completedChallenges.add(c.id);
           await completePvP(c);
         }
       }
     } catch {}
+  }
+
+  function showChallengePrompt(challenge) {
+    const el = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.style.cssText = 'background:#1a1a2a;border:1px solid #d4a847;border-radius:4px;padding:6px 8px;margin:4px 0;';
+    div.innerHTML = `<span style="color:#d4a847;">${challenge.fromName}</span> <span style="color:#888;">Lv${challenge.fromLevel}</span> challenges you!<br>` +
+      `<button onclick="respondChallenge('${challenge.id}',true,this.parentElement)" style="background:#1a3a2a;color:#70c7ba;border:1px solid #2a5a3a;border-radius:3px;padding:2px 8px;margin-top:4px;cursor:pointer;font-family:inherit;font-size:0.7rem;">Accept</button> ` +
+      `<button onclick="respondChallenge('${challenge.id}',false,this.parentElement)" style="background:#3a1a1a;color:#ff6b6b;border:1px solid #5a2a2a;border-radius:3px;padding:2px 8px;margin-top:4px;cursor:pointer;font-family:inherit;font-size:0.7rem;">Decline</button>`;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+    // Store challenge for accept handler
+    window._pendingChallenges = window._pendingChallenges || {};
+    window._pendingChallenges[challenge.id] = challenge;
+  }
+
+  async function respondChallenge(id, accept, el) {
+    el.innerHTML = accept ? '<span style="color:#70c7ba;">Accepting...</span>' : '<span style="color:#888;">Declined.</span>';
+    if (accept && window._pendingChallenges?.[id]) {
+      await acceptChallenge(window._pendingChallenges[id]);
+      el.innerHTML = '<span style="color:#70c7ba;">Challenge accepted! Waiting for tx...</span>';
+    }
   }
 
   async function acceptChallenge(challenge) {
