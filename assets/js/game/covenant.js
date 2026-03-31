@@ -140,7 +140,7 @@ const Covenant = {
 
     const pAmt = BigInt(playerUtxo.utxoEntry.amount);
     const oAmt = BigInt(oppUtxo.utxoEntry.amount);
-    const fee = 500000n + BigInt(Math.floor(Math.random() * 1000));
+    const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
 
     // Unsigned tx for player signing
     const unsignedTx = new kaspa.Transaction({
@@ -357,7 +357,7 @@ const Covenant = {
 
     const pAmt = BigInt(playerUtxo.utxoEntry.amount);
     const sAmt = BigInt(shopUtxo.utxoEntry.amount);
-    const fee = 500000n + BigInt(Math.floor(Math.random() * 1000));
+    const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
 
     // Unsigned tx for signing (player input needs sig)
     const unsignedTx = new kaspa.Transaction({
@@ -484,7 +484,7 @@ const Covenant = {
     const currentSpk = kaspa.ScriptBuilder.fromScript(currentScript).createPayToScriptHashScript();
 
     const covenantValue = BigInt(covenantUtxo.utxoEntry.amount);
-    const fee = 500000n + BigInt(Math.floor(Math.random() * 1000));
+    const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
     const outpoint = { transactionId: covenantUtxo.outpoint.transactionId, index: covenantUtxo.outpoint.index };
 
     const unsignedTx = new kaspa.Transaction({
