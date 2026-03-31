@@ -307,6 +307,7 @@ async function screenTown() {
     { key: 'I', label: 'The Consensus Tavern (Inn)' },
     { key: 'P', label: 'The Byzantine Colosseum (PvP)' },
     { key: 'C', label: 'Character Sheet' },
+    { key: 'R', label: 'Retire (withdraw KAS)' },
     { key: 'Q', label: 'Save & Quit' },
   ];
 
@@ -316,6 +317,7 @@ async function screenTown() {
   else if (choice === 'I') await screenInn();
   else if (choice === 'P') await screenPvP();
   else if (choice === 'C') await screenStats();
+  else if (choice === 'R') await screenRetire();
   else if (choice === 'Q') {
     GameState.save(s);
     E.clear();
@@ -937,6 +939,84 @@ async function screenPvP() {
     await E.pause();
     await screenTown();
   }
+}
+
+// ----- Retire (Withdraw KAS) -----
+async function screenRetire() {
+  const s = window._state;
+  E.clear();
+  E.gold('  === RETIRE YOUR KNIGHT ===');
+  E.blank();
+  E.line('  Retiring withdraws your covenant KAS back to your wallet.');
+  E.line('  Your character will be permanently ended.');
+  E.blank();
+
+  const opts = [
+    { key: 'Y', label: 'Yes, retire and withdraw' },
+    { key: 'N', label: 'No, return to town' },
+  ];
+  const choice = await E.menu(opts);
+  if (choice === 'N') { await screenTown(); return; }
+
+  if (!Wallet._kaspa || !Wallet._privateKeyHex) {
+    E.dim('  No wallet — nothing to withdraw.');
+    await E.pause();
+    await screenTown();
+    return;
+  }
+
+  const kaspa = Wallet._kaspa;
+  const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
+  const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+  const ocHp = s._onChainHp; const ocGold = s._onChainGold; const ocLevel = s._onChainLevel;
+  let totalWithdrawn = 0n;
+
+  // 1. Retire Player covenant
+  if (ocHp !== undefined) {
+    const spin = E.spinner('Retiring Player covenant...');
+    try {
+      await Covenant.ensureRpc(kaspa);
+      const playerAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
+      let playerUtxo = playerAddr ? await Covenant.findCovenantUtxo(playerAddr) : null;
+      if (!playerUtxo && s._lastPlayerTxId) {
+        const spk = kaspa.ScriptBuilder.fromScript(Covenant.buildPlayerScript(pub, ocHp, ocGold, ocLevel)).createPayToScriptHashScript();
+        playerUtxo = { outpoint: { transactionId: s._lastPlayerTxId, index: 0 }, utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: spk } };
+      }
+      if (playerUtxo) {
+        const result = await Covenant.retirePlayer(kaspa, pk, pub, ocHp, ocGold, ocLevel, playerUtxo);
+        if (result) {
+          totalWithdrawn += BigInt(result.withdrawAmount);
+          spin.stop(`Player retired — ${result.withdrawAmount} sompi withdrawn`, 't-cyan');
+          chainEmit('Player::retire', `Withdrawn ${result.withdrawAmount} sompi`, result.transactionId);
+        } else {
+          spin.stop('Player covenant too small to withdraw.', 't-dim');
+        }
+      } else {
+        spin.stop('Player covenant not found.', 't-dim');
+      }
+    } catch (err) { spin.stop(`Player retire failed: ${err.message}`, 't-dim'); }
+  }
+
+  // Shop + Opponent covenants: locked in the game (0.2 KAS each)
+  // These scripts require state changes (payment>0, fight) so can't withdraw without playing
+  E.dim('  Shop + Opponent covenants (0.4 KAS) remain on-chain as game artifacts.');
+
+  E.blank();
+  if (totalWithdrawn > 0n) {
+    E.gold(`  Total withdrawn: ${totalWithdrawn} sompi (${Number(totalWithdrawn) / 100000000} KAS)`);
+  } else {
+    E.dim('  Nothing withdrawn.');
+  }
+  E.blank();
+  E.line('  Your knight rests eternal in the BlockDAG.');
+
+  // Clear save
+  localStorage.removeItem('dagknight_save');
+  window._state = null;
+
+  E.blank();
+  await E.pause();
+  await screenTitle();
 }
 
 // ----- Stats -----

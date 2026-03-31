@@ -527,4 +527,136 @@ const Covenant = {
     const rpcResult = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
     return { transactionId: rpcResult.transactionId, playerOutputAmount: String(outputAmount) };
   },
+
+  // Retire: spend Player covenant, send KAS back to wallet
+  // Output 0 = minimal covenant (satisfies validateOutputState), Output 1 = wallet
+  async retirePlayer(kaspa, privateKey, pubkeyHex, curHp, curGold, curLevel, covenantUtxo) {
+    const currentScript = this.buildPlayerScript(pubkeyHex, curHp, curGold, curLevel);
+    const newScript = this.buildPlayerScript(pubkeyHex, curHp, curGold, curLevel);
+    const newSpk = kaspa.ScriptBuilder.fromScript(newScript).createPayToScriptHashScript();
+    const currentSpk = kaspa.ScriptBuilder.fromScript(currentScript).createPayToScriptHashScript();
+    const walletSpk = kaspa.payToAddressScript(privateKey.toAddress('testnet-12'));
+
+    const covenantValue = BigInt(covenantUtxo.utxoEntry.amount);
+    const fee = 10000n;
+    const minCovValue = 5000000n; // 0.05 KAS — small but above dust threshold // keep 0.2 KAS in covenant to avoid storage mass spike
+    const withdrawAmount = covenantValue - minCovValue - fee;
+    if (withdrawAmount <= 0n) return null; // nothing to withdraw
+
+    const outpoint = { transactionId: covenantUtxo.outpoint.transactionId, index: covenantUtxo.outpoint.index };
+
+    const unsignedTx = new kaspa.Transaction({
+      version: 0,
+      inputs: [{
+        previousOutpoint: outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+        utxo: { outpoint, amount: covenantValue, scriptPublicKey: currentSpk, blockDaaScore: BigInt(covenantUtxo.utxoEntry.blockDaaScore || 0), isCoinbase: false },
+      }],
+      outputs: [
+        { value: minCovValue, scriptPublicKey: newSpk },       // output 0: covenant (validated)
+        { value: withdrawAmount, scriptPublicKey: walletSpk }, // output 1: wallet (extra, unchecked)
+      ],
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const sigHex = kaspa.createInputSignature(unsignedTx, 0, privateKey);
+    const pubBytes = new Uint8Array(pubkeyHex.match(/.{2}/g).map(h => parseInt(h, 16)));
+    const argSb = new kaspa.ScriptBuilder();
+    argSb.addData(pubBytes);
+    argSb.addI64(BigInt(curHp)); argSb.addI64(BigInt(curGold)); argSb.addI64(BigInt(curLevel));
+    const redeemSb = new kaspa.ScriptBuilder();
+    redeemSb.addData(new Uint8Array(currentScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+    const sigScript = sigHex + argSb.toString() + redeemSb.toString();
+
+    const signedTx = new kaspa.Transaction({
+      version: 0,
+      inputs: [{ previousOutpoint: outpoint, signatureScript: sigScript, sequence: 0n, sigOpCount: 1 }],
+      outputs: [
+        { value: minCovValue, scriptPublicKey: newSpk },
+        { value: withdrawAmount, scriptPublicKey: walletSpk },
+      ],
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const rpc = await this.ensureRpc(kaspa);
+    const rpcResult = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+    return { transactionId: rpcResult.transactionId, withdrawAmount: String(withdrawAmount) };
+  },
+
+  // Retire: spend Shop covenant, send KAS to wallet
+  // Output 0 = wallet, Output 1 = minimal covenant (satisfies shop's validate on output 1)
+  async retireShop(kaspa, goldCollected, shopUtxo, walletAddress) {
+    const currentScript = this.buildShopScript(goldCollected);
+    const newScript = this.buildShopScript(goldCollected + 1); // payment=1 to pass shop's payment>0 check
+    const newSpk = kaspa.ScriptBuilder.fromScript(newScript).createPayToScriptHashScript();
+    const currentSpk = kaspa.ScriptBuilder.fromScript(currentScript).createPayToScriptHashScript();
+    const walletSpk = kaspa.payToAddressScript(new kaspa.Address(walletAddress));
+
+    const shopValue = BigInt(shopUtxo.utxoEntry.amount);
+    const fee = 10000n;
+    const minCovValue = 5000000n; // 0.05 KAS — small but above dust threshold
+    const withdrawAmount = shopValue - minCovValue - fee;
+    if (withdrawAmount <= 0n) return null;
+
+    const outpoint = { transactionId: shopUtxo.outpoint.transactionId, index: shopUtxo.outpoint.index };
+
+    // Shop validates output 1 — sig_script: <payment=1> <redeem> (payment must be > 0)
+    const argSb = new kaspa.ScriptBuilder();
+    argSb.addI64(1n);
+    const redeemSb = new kaspa.ScriptBuilder();
+    redeemSb.addData(new Uint8Array(currentScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+    const sigScript = argSb.toString() + redeemSb.toString();
+
+    const signedTx = new kaspa.Transaction({
+      version: 0,
+      inputs: [{ previousOutpoint: outpoint, signatureScript: sigScript, sequence: 0n, sigOpCount: 0 }],
+      outputs: [
+        { value: withdrawAmount, scriptPublicKey: walletSpk },  // output 0: wallet
+        { value: minCovValue, scriptPublicKey: newSpk },        // output 1: covenant (validated)
+      ],
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const rpc = await this.ensureRpc(kaspa);
+    const rpcResult = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+    return { transactionId: rpcResult.transactionId, withdrawAmount: String(withdrawAmount) };
+  },
+
+  // Retire: spend Opponent covenant, send KAS to wallet
+  // Output 0 = wallet, Output 1 = minimal covenant (validates output 1)
+  async retireOpponent(kaspa, oppHp, oppGold, oppUtxo, walletAddress) {
+    const currentScript = this.buildOpponentScript(oppHp, oppGold);
+    const newScript = this.buildOpponentScript(oppHp, oppGold);
+    const newSpk = kaspa.ScriptBuilder.fromScript(newScript).createPayToScriptHashScript();
+    const currentSpk = kaspa.ScriptBuilder.fromScript(currentScript).createPayToScriptHashScript();
+    const walletSpk = kaspa.payToAddressScript(new kaspa.Address(walletAddress));
+
+    const oppValue = BigInt(oppUtxo.utxoEntry.amount);
+    const fee = 10000n;
+    const minCovValue = 5000000n; // 0.05 KAS — small but above dust threshold
+    const withdrawAmount = oppValue - minCovValue - fee;
+    if (withdrawAmount <= 0n) return null;
+
+    const outpoint = { transactionId: oppUtxo.outpoint.transactionId, index: oppUtxo.outpoint.index };
+
+    // Opponent validates output 1 — sig_script: <newHp> <newGold> <redeem>
+    const argSb = new kaspa.ScriptBuilder();
+    argSb.addI64(BigInt(oppHp)); argSb.addI64(BigInt(oppGold));
+    const redeemSb = new kaspa.ScriptBuilder();
+    redeemSb.addData(new Uint8Array(currentScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+    const sigScript = argSb.toString() + redeemSb.toString();
+
+    const signedTx = new kaspa.Transaction({
+      version: 0,
+      inputs: [{ previousOutpoint: outpoint, signatureScript: sigScript, sequence: 0n, sigOpCount: 0 }],
+      outputs: [
+        { value: withdrawAmount, scriptPublicKey: walletSpk },  // output 0: wallet
+        { value: minCovValue, scriptPublicKey: newSpk },        // output 1: covenant (validated)
+      ],
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const rpc = await this.ensureRpc(kaspa);
+    const rpcResult = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+    return { transactionId: rpcResult.transactionId, withdrawAmount: String(withdrawAmount) };
+  },
 };
