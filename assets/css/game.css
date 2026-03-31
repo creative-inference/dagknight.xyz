@@ -81,8 +81,8 @@
 #terminal {
   position: relative;
   height: 700px;
-  max-width: 800px;
-  margin: 2rem auto;
+  max-width: none;
+  margin: 0;
   padding: 1.5rem;
   background: #000;
   border: 1px solid #33ff33;

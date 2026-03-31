@@ -172,8 +172,14 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
 <style>
   /* Normal mode: terminal + sidebar grid */
   #game-panel {
-    display: grid; grid-template-columns: 1fr 280px;
+    display: grid; grid-template-columns: 1fr 320px;
     gap: 4px; max-width: 100%; margin: 0 auto; padding: 0 1rem;
+  }
+  @media (min-width: 1400px) {
+    #game-panel { grid-template-columns: 1fr 400px; }
+  }
+  @media (min-width: 1800px) {
+    #game-panel { grid-template-columns: 1fr 480px; }
   }
   #game-panel #terminal { max-width: none; }
   #game-panel #game-sidebar {
