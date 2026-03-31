@@ -129,11 +129,11 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
 </div>
 
 <div class="chain-disclaimer">
-  <strong>Live on TN12:</strong> New players receive 1 test KAS and a real
-  <strong>SilverScript covenant UTXO</strong> is created on Kaspa Testnet-12.
-  The block feed shows live blocks via <code>api-tn12.kaspa.org</code>.
-  Game state updates will move on-chain next &mdash;
-  <a href="{{ '/game/plan/' | relative_url }}">see the full plan</a>.
+  <strong>Live on TN12:</strong> New players receive 4 test KAS from on-node mining rewards.
+  Three <strong>SilverScript covenant UTXOs</strong> (Player, Shop, Opponent) are deployed in one transaction.
+  Every game action updates state on-chain via <code>validateOutputState</code>.
+  Browser talks directly to our TN12 node via wRPC &mdash; no backend.
+  <a href="{{ '/game/covenants/' | relative_url }}">See the source code</a>.
 </div>
 
 <div id="chain-log">

@@ -84,7 +84,7 @@ GitHub Pages (static)          TN12 Node
         <h3>No Backend Server</h3>
         <p>
           Static site on GitHub Pages. Browser connects to TN12 node via WebSocket.
-          Only infrastructure: the node itself and a Cloud Function faucet for onboarding.
+          Only infrastructure: the node itself and a CPU miner that funds new players from block rewards.
           The BlockDAG is the server.
         </p>
       </div>
@@ -108,7 +108,7 @@ GitHub Pages (static)          TN12 Node
         <div class="tech-row">
           <span class="tech-game" style="color: var(--primary);">&#x2705; Fund Players</span>
           <span class="tech-arrow">&rarr;</span>
-          <span class="tech-chain">Cloud Function faucet sends 1 KAS to new players via signed TN12 transaction</span>
+          <span class="tech-chain">On-node faucet sends 4 KAS from mining rewards &mdash; funds wallet + deploys 3 covenants in one tx</span>
         </div>
         <div class="tech-row">
           <span class="tech-game" style="color: var(--primary);">&#x2705; Create Covenant</span>
@@ -231,11 +231,11 @@ GitHub Pages (static)          TN12 Node
     <ul style="color: var(--text-dim); font-size: 0.9rem; list-style: none; padding: 0; line-height: 2.2; margin-bottom: 2rem;">
       <li style="color: var(--primary);">&#x2705; Browser tx construction &mdash; <code>@kasdk/web</code> v0.15.2, ScriptBuilder + Transaction confirmed working</li>
       <li style="color: var(--primary);">&#x2705; TN12 connectivity &mdash; REST API at <code>api-tn12.kaspa.org</code> is public, includes tx submission</li>
-      <li style="color: var(--primary);">&#x2705; Test KAS &mdash; 10,000 KAS from TN12 faucet, auto-dispensed via Cloud Function</li>
-      <li style="color: var(--primary);">&#x2705; No backend needed &mdash; static frontend + REST API + one faucet function</li>
-      <li style="color: var(--primary);">&#x2705; SilverScript compiler &mdash; <code>player.sil</code> compiled to 172-byte P2SH bytecode via <code>silverc</code></li>
+      <li style="color: var(--primary);">&#x2705; Test KAS &mdash; on-node CPU miner generates block rewards, funds new players directly</li>
+      <li style="color: var(--primary);">&#x2705; No backend needed &mdash; static frontend + wRPC to TN12 node</li>
+      <li style="color: var(--primary);">&#x2705; SilverScript compiler &mdash; <code>player.sil</code> compiled to 160-byte P2SH bytecode via <code>silverc</code></li>
       <li style="color: var(--primary);">&#x2705; Covenant UTXO creation &mdash; Player covenant deployed to TN12 from browser, confirmed on-chain</li>
-      <li style="color: var(--primary);">&#x2705; Player onboarding &mdash; faucet Cloud Function auto-funds new players with 1 KAS</li>
+      <li style="color: var(--primary);">&#x2705; Player onboarding &mdash; on-node faucet funds wallet + deploys 3 covenants in one tx</li>
     </ul>
 
     <h2 class="section-title">Open <span class="gold">Questions</span></h2>

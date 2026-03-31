@@ -175,15 +175,17 @@ description: "Complete source code and architecture for three interacting covena
 <h2>Deployment &mdash; Three Covenants, One Transaction</h2>
 
 <p>
-  Character creation deploys Player + Shop + Opponent in a single tx.
-  The faucet provides 1 KAS (100M sompi). The tx allocates:
+  Character creation deploys all three covenants + funds the player wallet in a single tx
+  directly from on-node mining rewards. Each covenant holds 1 KAS to stay under the
+  block storage mass limit (small UTXOs incur high storage mass penalties).
 </p>
 <table>
   <tr><th>Output</th><th>Covenant</th><th>Value</th></tr>
-  <tr><td>0</td><td style="color:#70c7ba;">Player</td><td>10,000,000 sompi (0.1 KAS)</td></tr>
-  <tr><td>1</td><td style="color:#d4a847;">Shop</td><td>5,000,000 sompi (0.05 KAS)</td></tr>
-  <tr><td>2</td><td style="color:#ff6b6b;">Opponent</td><td>5,000,000 sompi (0.05 KAS)</td></tr>
-  <tr><td>3</td><td>Change</td><td>~79,990,000 sompi</td></tr>
+  <tr><td>0</td><td style="color:#70c7ba;">Player</td><td>100,000,000 sompi (1 KAS)</td></tr>
+  <tr><td>1</td><td style="color:#d4a847;">Shop</td><td>100,000,000 sompi (1 KAS)</td></tr>
+  <tr><td>2</td><td style="color:#ff6b6b;">Opponent</td><td>100,000,000 sompi (1 KAS)</td></tr>
+  <tr><td>3</td><td>Wallet</td><td>100,000,000 sompi (1 KAS)</td></tr>
+  <tr><td>4</td><td>Change</td><td>remainder to faucet</td></tr>
 </table>
 
 <pre><code class="language-js">async createPlayerAndShop(kaspa, privateKey, pubkeyHex, hp, gold, level, fundingUtxos) {
@@ -484,7 +486,8 @@ description: "Complete source code and architecture for three interacting covena
 <p>
   No extensions. No MetaMask. The browser generates a random private key,
   derives a TN12 address, and stores it in <code>localStorage</code>.
-  The faucet Cloud Function sends 1 test KAS to fund covenant creation.
+  An on-node faucet (funded by our CPU miner's block rewards) sends 4 KAS
+  to deploy 3 covenants + fund the wallet &mdash; all in one transaction.
 </p>
 
 <pre><code class="language-js">// Generate keypair
@@ -496,13 +499,10 @@ const privateKeyHex = Array.from(bytes)
 const pk = new kaspa.PrivateKey(privateKeyHex);
 const address = pk.toAddress('testnet-12').toString();
 
-// Fund via Cloud Function faucet
-const resp = await fetch(FAUCET_URL, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ address }),
-});
-// Returns: { txId: "...", amount: 100000000 }</code></pre>
+// Fund + deploy covenants in one tx from on-node mining rewards
+const result = await Covenant.createFromFaucet(kaspa, pk, pubkeyHex, hp, gold, level);
+// Returns: { transactionId: "..." }
+// One tx: coinbase UTXO → 3 covenants (1 KAS each) + wallet (1 KAS) + change</code></pre>
 
 <!-- ============================================================ -->
 <h2>Network Layer &mdash; Direct wRPC to TN12 Node</h2>
@@ -546,7 +546,8 @@ await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });</cod
 <strong>State:</strong>        UTXO chain &mdash; each spend creates next state
 <strong>Auth:</strong>         Schnorr signatures (player actions only)
 <strong>ICC:</strong>          Multi-input P2SH txs (shop, PvP)
-<strong>Faucet:</strong>       Google Cloud Function + Secret Manager
+<strong>Faucet:</strong>       On-node CPU miner block rewards
+<strong>Miner:</strong>        Custom tn12-miner (same rusty-kaspa codebase)
 <strong>Backend:</strong>      None.
 </pre>
 </div>
