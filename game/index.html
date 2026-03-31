@@ -216,7 +216,19 @@ function toggleFullscreen() {
   const panel = document.getElementById('game-panel');
   const btn = document.getElementById('fullscreen-btn');
   panel.classList.toggle('fullscreen');
-  btn.textContent = panel.classList.contains('fullscreen') ? 'Exit Fullscreen' : 'Fullscreen';
+  const isFs = panel.classList.contains('fullscreen');
+  btn.textContent = isFs ? 'Exit Fullscreen' : 'Fullscreen';
+  let exitBtn = document.getElementById('fs-exit-btn');
+  if (isFs && !exitBtn) {
+    exitBtn = document.createElement('button');
+    exitBtn.id = 'fs-exit-btn';
+    exitBtn.textContent = 'Exit';
+    exitBtn.style.cssText = 'position:fixed;top:8px;right:8px;z-index:10000;background:#1a1e28;color:#ff6b6b;border:1px solid #ff6b6b;border-radius:4px;padding:0.3rem 0.8rem;font-family:var(--font-mono);font-size:0.75rem;cursor:pointer;';
+    exitBtn.onclick = toggleFullscreen;
+    document.body.appendChild(exitBtn);
+  } else if (!isFs && exitBtn) {
+    exitBtn.remove();
+  }
   if (panel.classList.contains('fullscreen')) {
     document.getElementById('input-field')?.focus();
   }
