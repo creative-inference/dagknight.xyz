@@ -543,14 +543,16 @@ await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });</cod
 <strong>Frontend:</strong>     Static HTML/CSS/JS on GitHub Pages
 <strong>WASM SDK:</strong>     @kasdk/web (tx building, signing, address derivation)
 <strong>Transport:</strong>    WebSocket (wRPC) to TN12 node
-<strong>Node:</strong>         rusty-kaspa (tn12 branch) on DigitalOcean
+<strong>Node:</strong>         rusty-kaspa (covpp-reset2 branch) on DigitalOcean
 <strong>Covenants:</strong>    SilverScript &rarr; compiled bytecode &rarr; P2SH UTXOs
 <strong>State:</strong>        UTXO chain &mdash; each spend creates next state
 <strong>Auth:</strong>         Schnorr signatures (player actions only)
 <strong>ICC:</strong>          Multi-input P2SH txs (shop, PvP)
 <strong>Faucet:</strong>       On-node CPU miner block rewards
 <strong>Miner:</strong>        Custom tn12-miner (same rusty-kaspa codebase)
-<strong>Backend:</strong>      None.
+<strong>Registry:</strong>     Node.js indexer on same droplet (player list API)
+<strong>Combat:</strong>       Deterministic &mdash; seeded from BlockDAG tip hash (xorshift64)
+<strong>Backend:</strong>      None (registry is optional, game works without it).
 </pre>
 </div>
 
