@@ -170,34 +170,45 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
 </div><!-- game-panel -->
 
 <style>
+  /* Normal mode: terminal + sidebar grid */
+  #game-panel {
+    display: grid; grid-template-columns: 1fr 320px;
+    gap: 0.5rem; max-width: 1300px; margin: 0 auto;
+  }
+  #game-panel #terminal { max-width: none; }
+  #game-panel #game-sidebar {
+    display: flex; flex-direction: column; gap: 0.5rem;
+  }
+  #game-panel #chain-log { max-width: none; margin: 0; }
+  #game-panel #player-list { max-width: none; margin: 0; }
+  #game-panel #chat-panel { margin: 0; }
+  #game-panel #chain-log { max-height: 250px; overflow-y: auto; }
+  #game-panel #chat-messages { max-height: 180px; }
+
+  /* Fullscreen mode */
   #game-panel.fullscreen {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
     z-index: 9999; background: #0a0e14;
-    display: grid; grid-template-columns: 1fr 350px;
-    gap: 0; padding: 0; overflow: hidden;
+    grid-template-columns: 1fr 350px;
+    gap: 0; padding: 0; overflow: hidden; max-width: none;
   }
   #game-panel.fullscreen #terminal {
-    max-width: none; height: 100vh; border-radius: 0;
-    overflow-y: auto;
+    height: 100vh; border-radius: 0; overflow-y: auto;
   }
   #game-panel.fullscreen #game-sidebar {
-    display: flex; flex-direction: column; height: 100vh;
-    overflow-y: auto; border-left: 1px solid #2a2e38;
-    padding: 0.5rem;
+    height: 100vh; overflow-y: auto;
+    border-left: 1px solid #2a2e38; padding: 0.5rem;
   }
-  #game-panel.fullscreen #chain-log {
-    max-width: none; margin: 0 0 0.5rem; flex: 1;
-  }
-  #game-panel.fullscreen #player-list {
-    max-width: none; margin: 0;
-  }
-  #game-panel:not(.fullscreen) #game-sidebar {
-    display: contents; /* in normal mode, sidebar elements flow normally */
-  }
-  #game-panel.fullscreen #chain-log { max-height: 35vh; overflow-y: auto; }
+  #game-panel.fullscreen #chain-log { max-height: 35vh; }
   #game-panel.fullscreen #chat-panel { flex: 1; }
-  #game-panel.fullscreen #chat-messages { max-height: none !important; flex: 1; overflow-y: auto; }
+  #game-panel.fullscreen #chat-messages { max-height: none !important; flex: 1; }
   #game-panel.fullscreen #chat-panel > div { display: flex; flex-direction: column; height: 100%; }
+
+  /* Mobile: stack vertically */
+  @media (max-width: 900px) {
+    #game-panel { grid-template-columns: 1fr; }
+    #game-panel.fullscreen { grid-template-columns: 1fr; }
+  }
 </style>
 
 <script>
@@ -247,7 +258,15 @@ async function sendChat() {
   const msg = field.value.trim();
   if (!msg) return;
   const s = window._state;
-  if (!s || !s.name || !Wallet.address) return;
+  if (!s || !s.name || !Wallet.address) {
+    const el = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.innerHTML = '<span style="color:#ff6b6b;">Start a game first to chat.</span>';
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+    field.value = '';
+    return;
+  }
   try {
     await fetch(CHAT_API, {
       method: 'POST',
