@@ -64,7 +64,7 @@ async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
       const playerSpk = kaspa.ScriptBuilder.fromScript(playerScript).createPayToScriptHashScript();
       playerUtxo = {
         outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
-        utxoEntry: { amount: s._lastPlayerAmount || '10000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: playerSpk },
+        utxoEntry: { amount: s._lastPlayerAmount || '100000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: playerSpk },
       };
     } else {
       const playerAddr = Covenant.getCovenantAddress(kaspa, pub, ocHp, ocGold, ocLevel);
@@ -78,7 +78,7 @@ async function pvpOnChain(s, newPlayerHp, newPlayerGold, opp, outcome) {
       const oppSpk = kaspa.ScriptBuilder.fromScript(oppScript).createPayToScriptHashScript();
       oppUtxo = {
         outpoint: { transactionId: s._lastOppTxId, index: s._lastOppIndex ?? 2 },
-        utxoEntry: { amount: s._lastOppAmount || '5000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: oppSpk },
+        utxoEntry: { amount: s._lastOppAmount || '100000000', blockDaaScore: '0', isCoinbase: false, scriptPublicKey: oppSpk },
       };
     } else {
       const oppAddr = Covenant.getOpponentAddress(kaspa, s._oppHp, s._oppGold);
@@ -239,51 +239,36 @@ async function screenNewGame() {
   E.gold(`  Welcome, ${window._state.name} the ${CLASSES[classKey].name}.`);
   E.blank();
 
-  // Fund player wallet on TN12
-  const spin = E.spinner('Forging your identity on the BlockDAG...');
+  // Ensure wallet keypair and WASM are loaded
+  const walletSpin = E.spinner('Forging your identity on the BlockDAG...');
   try {
-    const result = await Wallet.fund();
-    if (result.alreadyFunded) {
-      spin.stop('Wallet already funded on TN12.', 't-cyan');
-    } else {
-      spin.stop('1 KAS deposited to your wallet on TN12.', 't-cyan');
-      E.dim(`  TX: ${result.txId.substring(0, 24)}...`);
-    }
+    await Wallet.ensureAddress();
+    walletSpin.stop(`Address: ${Wallet.address.substring(0, 30)}...`, 't-cyan');
   } catch (err) {
-    spin.stop(`Wallet funding skipped: ${err.message}`, 't-dim');
+    walletSpin.stop(`Wallet skipped: ${err.message}`, 't-dim');
   }
 
-  if (Wallet.address) {
-    E.dim(`  Address: ${Wallet.address.substring(0, 30)}...`);
-  }
-
-  // Create Player covenant UTXO on TN12
-  if (Wallet._kaspa && Wallet._privateKeyHex && Wallet.funded) {
-    const covSpin = E.spinner('Inscribing covenant on the BlockDAG...');
+  // Deploy covenants + fund wallet in ONE tx from faucet coinbase (no chaining)
+  if (Wallet._kaspa && Wallet._privateKeyHex) {
+    const covSpin = E.spinner('Forging covenants on the BlockDAG...');
     try {
       const kaspa = Wallet._kaspa;
       const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
       const pubkeyHex = pk.toPublicKey().toXOnlyPublicKey().toString();
       const s = window._state;
-      // Connect to our TN12 node
       await Covenant.ensureRpc(kaspa);
-      // Wait for faucet tx to confirm
-      let utxos = await Covenant.getUtxos(Wallet.address);
-      let retries = 0;
-      while ((!utxos || utxos.length === 0) && retries < 10) {
-        await new Promise(r => setTimeout(r, 2000));
-        utxos = await Covenant.getUtxos(Wallet.address);
-        retries++;
-      }
-      const result = await Covenant.createPlayerAndShop(
-        kaspa, pk, pubkeyHex, s.hp, s.gold, 1, utxos
+
+      // Single tx: faucet coinbase → 3 covenants + wallet funding
+      const result = await Covenant.createFromFaucet(
+        kaspa, pk, pubkeyHex, s.hp, s.gold, 1
       );
       const txId = result.transactionId || '';
       s._onChainHp = s.hp; s._onChainGold = s.gold; s._onChainLevel = 1;
-      s._lastPlayerTxId = txId; s._lastPlayerAmount = '10000000';
+      s._lastPlayerTxId = txId; s._lastPlayerAmount = '100000000';
       s._shopGoldCollected = 0;
       s._oppHp = 50; s._oppGold = 100;
-      s._lastOppTxId = txId; s._lastOppIndex = 2; s._lastOppAmount = '5000000';
+      s._lastOppTxId = txId; s._lastOppIndex = 2; s._lastOppAmount = '100000000';
+      Wallet._funded = true; Wallet._save();
       GameState.save(s);
       covSpin.stop('Player + Shop + Arena covenants created on TN12!', 't-cyan');
       E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);

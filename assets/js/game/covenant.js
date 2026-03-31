@@ -7,6 +7,7 @@
    ============================================================ */
 
 const COVENANT_NODE_WS = 'wss://tn12.dagknight.xyz';
+const FAUCET_PRIVATE_KEY = 'e2e890b7101ce497fbfdb97707d3ba3bd8c727b2fa9fae81be80d629ea7581fc';
 
 // Compiled Player covenant (160 bytes, without_selector=true)
 const PLAYER_SCRIPT_HEX = '20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa08140000000000000008000000000000000008010000000000000057795479876958795879ac69567900a269557900a269547978a269537901207c7e577958cd587c7e577958cd587c7e577958cd587c7e7e7e7eb976c97602a00094013c937cbc7eaa02000001aa7e01207e7c7e01877e00c3876975757575757575757551';
@@ -35,7 +36,7 @@ const Covenant = {
   async ensureRpc(kaspa) {
     if (this._rpc) return this._rpc;
     this._kaspa = kaspa;
-    const rpc = new kaspa.RpcClient({ url: COVENANT_NODE_WS });
+    const rpc = new kaspa.RpcClient({ url: COVENANT_NODE_WS, encoding: kaspa.Encoding.SerdeJson });
     await rpc.connect();
     this._rpc = rpc;
     return rpc;
@@ -139,7 +140,7 @@ const Covenant = {
 
     const pAmt = BigInt(playerUtxo.utxoEntry.amount);
     const oAmt = BigInt(oppUtxo.utxoEntry.amount);
-    const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
+    const fee = 500000n + BigInt(Math.floor(Math.random() * 1000));
 
     // Unsigned tx for player signing
     const unsignedTx = new kaspa.Transaction({
@@ -215,8 +216,8 @@ const Covenant = {
 
     let totalInput = 0n;
     for (const inp of inputs) totalInput += inp.utxo.amount;
-    const shopValue = 5000000n;
-    const fee = 10000n;
+    const shopValue = 100000000n;
+    const fee = 500000n;
     if (totalInput < shopValue + fee) throw new Error('Insufficient funds for shop');
     const change = totalInput - shopValue - fee;
 
@@ -253,10 +254,10 @@ const Covenant = {
 
     let totalInput = 0n;
     for (const inp of inputs) totalInput += inp.utxo.amount;
-    const playerValue = 10000000n;
-    const shopValue = 5000000n;
-    const oppValue = 5000000n;
-    const fee = 10000n;
+    const playerValue = 100000000n;  // 1 KAS each — keeps storage mass under block limit
+    const shopValue = 100000000n;
+    const oppValue = 100000000n;
+    const fee = 500000n;
     if (totalInput < playerValue + shopValue + oppValue + fee) throw new Error('Insufficient funds');
     const change = totalInput - playerValue - shopValue - oppValue - fee;
 
@@ -274,6 +275,65 @@ const Covenant = {
 
     const signedTx = kaspa.signTransaction(tx, [privateKey], false);
     const rpc = await this.ensureRpc(kaspa);
+    return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
+  },
+
+  // Deploy covenants directly from faucet coinbase UTXO (no intermediate wallet funding)
+  async createFromFaucet(kaspa, playerPrivateKey, pubkeyHex, hp, gold, level) {
+    const rpc = await this.ensureRpc(kaspa);
+    const faucetPk = new kaspa.PrivateKey(FAUCET_PRIVATE_KEY);
+    const faucetAddr = faucetPk.toAddress('testnet-12');
+    const faucetSpk = kaspa.payToAddressScript(faucetAddr);
+    const playerAddr = playerPrivateKey.toAddress('testnet-12');
+    const playerSpk = kaspa.payToAddressScript(playerAddr);
+
+    // Prefer non-coinbase UTXOs (lower storage mass), fall back to mature coinbase
+    const resp = await rpc.getUtxosByAddresses({ addresses: [faucetAddr.toString()] });
+    const allUtxos = resp.entries || resp || [];
+    const info = await rpc.getBlockDagInfo();
+    const daa = Number(info.virtualDaaScore);
+    const nonCoinbase = allUtxos.filter(u => !(u.entry || u).isCoinbase && BigInt((u.entry || u).amount) >= 200000000n);
+    const mature = allUtxos.filter(u => (daa - Number((u.entry || u).blockDaaScore)) > 1100);
+    const candidates = nonCoinbase.length ? nonCoinbase : mature;
+    if (!candidates.length) throw new Error('No spendable faucet UTXOs');
+
+    const u = candidates[0];
+    const e = u.entry || u;
+    const inputAmt = BigInt(e.amount);
+
+    // Build covenant outputs
+    const covPlayerSpk = kaspa.ScriptBuilder.fromScript(this.buildPlayerScript(pubkeyHex, hp, gold, level)).createPayToScriptHashScript();
+    const covShopSpk = kaspa.ScriptBuilder.fromScript(this.buildShopScript(0)).createPayToScriptHashScript();
+    const covOppSpk = kaspa.ScriptBuilder.fromScript(this.buildOpponentScript(50, 100)).createPayToScriptHashScript();
+
+    const playerValue = 100000000n;  // 1 KAS each — keeps storage mass under block limit
+    const shopValue = 100000000n;
+    const oppValue = 100000000n;
+    const walletValue = 100000000n; // 1 KAS to player wallet
+    const fee = 500000n;
+    const total = playerValue + shopValue + oppValue + walletValue + fee;
+    if (inputAmt < total) throw new Error('Faucet UTXO too small');
+    const change = inputAmt - total;
+
+    const outputs = [
+      { value: playerValue, scriptPublicKey: covPlayerSpk },
+      { value: shopValue, scriptPublicKey: covShopSpk },
+      { value: oppValue, scriptPublicKey: covOppSpk },
+      { value: walletValue, scriptPublicKey: playerSpk },
+    ];
+    if (change > 0n) outputs.push({ value: change, scriptPublicKey: faucetSpk });
+
+    const tx = new kaspa.Transaction({
+      version: 0,
+      inputs: [{
+        previousOutpoint: u.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+        utxo: { outpoint: u.outpoint, amount: inputAmt, scriptPublicKey: faucetSpk, blockDaaScore: BigInt(e.blockDaaScore || 0), isCoinbase: e.isCoinbase || false },
+      }],
+      outputs,
+      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+    });
+
+    const signedTx = kaspa.signTransaction(tx, [faucetPk], false);
     return rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
   },
 
@@ -297,7 +357,7 @@ const Covenant = {
 
     const pAmt = BigInt(playerUtxo.utxoEntry.amount);
     const sAmt = BigInt(shopUtxo.utxoEntry.amount);
-    const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
+    const fee = 500000n + BigInt(Math.floor(Math.random() * 1000));
 
     // Unsigned tx for signing (player input needs sig)
     const unsignedTx = new kaspa.Transaction({
@@ -395,7 +455,7 @@ const Covenant = {
     let totalInput = 0n;
     for (const inp of inputs) totalInput += inp.utxo.amount;
     const covenantValue = 10000000n;
-    const fee = 10000n;
+    const fee = 500000n;
     if (totalInput < covenantValue + fee) throw new Error('Insufficient funds');
     const change = totalInput - covenantValue - fee;
 
@@ -424,7 +484,7 @@ const Covenant = {
     const currentSpk = kaspa.ScriptBuilder.fromScript(currentScript).createPayToScriptHashScript();
 
     const covenantValue = BigInt(covenantUtxo.utxoEntry.amount);
-    const fee = 10000n + BigInt(Math.floor(Math.random() * 1000));
+    const fee = 500000n + BigInt(Math.floor(Math.random() * 1000));
     const outpoint = { transactionId: covenantUtxo.outpoint.transactionId, index: covenantUtxo.outpoint.index };
 
     const unsignedTx = new kaspa.Transaction({
