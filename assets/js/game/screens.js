@@ -318,16 +318,10 @@ async function screenNewGame() {
       E.dim(`  Covenant TX: ${txId.substring(0, 24)}...`);
       chainEmit('Player::create', `Player + Shop covenants deployed`, txId);
 
-      // Send player beacon (heartbeat) — announces presence on-chain
-      try {
-        // Wait for wallet UTXO from creation tx
-        await new Promise(r => setTimeout(r, 3000));
-        const walletUtxos = await Covenant.getUtxos(Wallet.address);
-        if (walletUtxos.length) {
-          const beaconResult = await Covenant.sendBeacon(kaspa, pk, s.level, walletUtxos);
-          if (beaconResult) chainEmit('Player::beacon', `Level ${s.level} heartbeat`, beaconResult.transactionId);
-        }
-      } catch {}
+      // Register player in the indexer
+      const classIdx = Object.keys(CLASSES).indexOf(classKey) + 1;
+      Covenant.registerPlayer(s.name, classIdx, s.level, Wallet.address, txId);
+      chainEmit('Player::registered', `${s.name} joined the realm`);
     } catch (err) {
       covSpin.stop(`Covenant creation skipped: ${err.message}`, 't-dim');
       chainEmit('Player::create (sim)', `${window._state.name} — localStorage only`);

@@ -118,33 +118,29 @@ const Chain = {
     }
   },
 
-  // Poll beacon address for active players
+  // Fetch active players from indexer API
   async refreshBeacons() {
     const listEl = document.getElementById('beacon-list');
     if (!listEl) return;
     try {
-      if (!Wallet._kaspa || !Covenant._rpc) {
-        // Try connecting
-        if (Wallet._kaspa) await Covenant.ensureRpc(Wallet._kaspa);
-        else return;
-      }
-      const beacons = await Covenant.getActiveBeacons(Wallet._kaspa);
-      if (beacons.length === 0) {
+      const players = await Covenant.getActivePlayers();
+      if (!players.length) {
         listEl.innerHTML = '<span style="color: #555;">No active knights found.</span>';
         return;
       }
-      listEl.innerHTML = beacons
-        .sort((a, b) => b.level - a.level)
-        .map((b, i) => {
-          const txShort = b.outpoint?.transactionId?.substring(0, 12) || '?';
-          return `<div style="display:flex;justify-content:space-between;border-bottom:1px solid #1a1e28;padding:2px 0;">` +
-            `<span>Knight #${i + 1}</span>` +
-            `<span style="color:#d4a847;">Level ${b.level}</span>` +
-            `<span style="color:#555;font-size:0.75rem;">${txShort}...</span>` +
-            `</div>`;
-        }).join('');
+      const classNames = ['', 'Knight', 'Mage', 'Rogue', 'Cleric'];
+      listEl.innerHTML = players.map(p => {
+        const cls = classNames[p.classId] || 'Unknown';
+        const addr = p.address ? p.address.substring(0, 20) + '...' : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1a1e28;padding:3px 0;">` +
+          `<span style="color:#70c7ba;">${p.name}</span>` +
+          `<span style="color:#888;font-size:0.75rem;">${cls}</span>` +
+          `<span style="color:#d4a847;">Lv ${p.level}</span>` +
+          `<span style="color:#444;font-size:0.7rem;">${addr}</span>` +
+          `</div>`;
+      }).join('');
     } catch {
-      listEl.innerHTML = '<span style="color: #555;">Beacon scan unavailable.</span>';
+      listEl.innerHTML = '<span style="color: #555;">Player registry unavailable.</span>';
     }
   },
 };
