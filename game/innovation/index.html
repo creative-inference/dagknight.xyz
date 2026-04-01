@@ -126,6 +126,30 @@ description: "How ancient covenant magic and BlockDAG sorcery combine to create 
       </div>
     </div>
 
+    <div class="pillars" style="margin-bottom: 2rem;">
+      <div class="pillar-card">
+        <div class="pillar-icon">&#x1F9E9;</div>
+        <h3>The Abstraction Layer (KWP)</h3>
+        <p>
+          The five innovations above work &mdash; but building on them raw means
+          wrangling hex offsets, OP_PUSH opcodes, sig_script construction, and
+          manual UTXO scanning. Every game feature required 100 lines of careful
+          byte manipulation. One wrong offset and the covenant rejects your transaction.
+        </p>
+        <p style="margin-top: 0.8rem;">
+          We pulled all of that complexity out of the game code and into a separate
+          abstraction layer: the
+          <a href="https://github.com/creative-inference/kwp" target="_blank" rel="noopener" style="color: var(--primary);">
+            Kaspa World Protocol (KWP)</a>.
+          One JS file, no dependencies. Decode covenant state in one call. Build valid
+          transactions from intent. Identify entity types by script hash. Verify randomness
+          from block hashes. The DAG Gate now runs entirely on KWP &mdash; no manual hex
+          anywhere in the game code. And because it's a standard, any new game or
+          application can reuse the same layer.
+        </p>
+      </div>
+    </div>
+
     <div class="rune-divider" style="margin: 2rem 0;">&#x2694;</div>
 
     <h2 class="section-title">The <span class="gold">Lineage</span></h2>
@@ -166,6 +190,8 @@ description: "How ancient covenant magic and BlockDAG sorcery combine to create 
       <li style="color: var(--primary);">&#x2705; On-node faucet funds players from mining rewards &mdash; wallet + 3 covenants in one tx</li>
       <li style="color: var(--primary);">&#x2705; Live TN12 block feed displayed alongside the game terminal</li>
       <li style="color: var(--primary);">&#x2705; Full game loop playable today &mdash; forest combat, shop, inn, PvP</li>
+      <li style="color: var(--primary);">&#x2705; All covenant complexity abstracted into KWP &mdash; zero manual hex in game code</li>
+      <li style="color: var(--primary);">&#x2705; KWP schema validated against real TN12 script hashes (SHA-256 verified)</li>
     </ul>
 
     <div class="game-tech-note">

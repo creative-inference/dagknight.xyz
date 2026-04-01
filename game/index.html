@@ -100,14 +100,15 @@ description: "A BBS door game forged in the fires of BlockDAG consensus"
     </div>
 
     <div class="game-tech-note" style="margin-top: 2.5rem;">
-      <h3>Status: Three Covenants + ICC + Verifiable Combat + Player Registry LIVE on TN12</h3>
+      <h3>Status: Three Covenants + ICC + KWP Abstraction Layer LIVE on TN12</h3>
       <p style="color: var(--text); margin-bottom: 0.5rem;">
         Character creation deploys <strong>three covenants</strong> in one transaction:
         Player (160 bytes), Shop (56 bytes), and Opponent (80 bytes) &mdash; 296 bytes total on Kaspa Testnet-12.
-        Every game action updates state on-chain via <code>validateOutputState</code>, owner-signed with Schnorr.
-        Shop purchases and PvP combat use <strong>Inter-Covenant Communication</strong>:
-        two covenants updated atomically in one tx.
-        Combat is <strong>deterministic</strong> &mdash; seeded from the BlockDAG's tip hash, replayable and verifiable by anyone.
+        All covenant complexity is abstracted through the
+        <a href="https://github.com/creative-inference/kwp" target="_blank" rel="noopener" style="color: var(--primary);">Kaspa World Protocol (KWP)</a>
+        &mdash; zero manual hex in the game code.
+        State encoding, transaction building, entity identification, and verifiable RNG
+        all go through KWP's standard API.
         No backend. Browser talks to our TN12 node via wRPC.
       </p>
     </div>
@@ -575,7 +576,8 @@ setInterval(pollChallenges, 10000);
 <div class="chain-disclaimer">
   <strong>Live on TN12:</strong> New players receive 1 test KAS from on-node mining rewards.
   Three <strong>SilverScript covenant UTXOs</strong> (Player, Shop, Opponent) are deployed in one transaction.
-  Every game action updates state on-chain via <code>validateOutputState</code>.
+  All state encoding and transaction building powered by
+  <a href="https://github.com/creative-inference/kwp" target="_blank" rel="noopener">Kaspa World Protocol (KWP)</a>.
   Browser talks directly to our TN12 node via wRPC &mdash; no backend.
   <a href="{{ '/game/covenants/' | relative_url }}">See the source code</a>.
 </div>
