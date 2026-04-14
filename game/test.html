@@ -143,8 +143,30 @@
   setInterval(refreshChat, 5000);
   setTimeout(refreshChat, 2000);
 
-  // --- PvP Challenges ---
+  // --- PvP Multi-Round Combat ---
   const PVP_API = 'https://tn12.dagknight.xyz/api';
+  let _pvpSession = null;
+  let _pvpPhase = 'idle'; // idle | combat | signing | waiting | submitting | done
+  const _seenChallenges = new Set();
+
+  function getMyPvpSide(session) {
+    if (!Wallet.address) return null;
+    if (session.a?.addr === Wallet.address) return 'a';
+    if (session.b?.addr === Wallet.address) return 'b';
+    return null;
+  }
+
+  function chatMsg(type, text) {
+    const el = document.getElementById('chat-messages');
+    if (!el) return;
+    const div = document.createElement('div');
+    const color = type === 'system' ? '#d4a847' : type === 'error' ? '#ff6b6b' : '#70c7ba';
+    div.innerHTML = `<span style="color:${color};">[PvP] ${text}</span>`;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // --- Challenge Flow ---
 
   async function challengePlayer(targetAddr, targetName) {
     const s = window._state;
@@ -165,19 +187,15 @@
         body: JSON.stringify({
           fromAddr: Wallet.address, toAddr: targetAddr,
           fromName: s.name, toName: targetName,
-          stake: s.level * 10,
           fromPubkey: pub,
           fromHp: s._onChainHp, fromGold: s._onChainGold, fromLevel: s._onChainLevel,
           fromUtxo: { outpoint: myUtxo.outpoint, amount: String((myUtxo.utxoEntry || myUtxo.entry).amount) },
         }),
       });
       const data = await resp.json();
-      if (data.ok) { s._pendingChallenge = data.challengeId; GameState.save(s); }
+      if (data.ok) chatMsg('system', `Challenge sent to ${targetName}!`);
     } catch (e) { console.log('Challenge error:', e); }
   }
-
-  const _seenChallenges = new Set();
-  const _completedChallenges = new Set();
 
   async function pollChallenges() {
     if (!Wallet.address || !window._state) return;
@@ -188,10 +206,6 @@
         if (c.status === 'pending' && c.toAddr === Wallet.address && !_seenChallenges.has(c.id)) {
           _seenChallenges.add(c.id);
           showChallengePrompt(c);
-        }
-        if (c.status === 'accepted' && c.fromAddr === Wallet.address && !_completedChallenges.has(c.id)) {
-          _completedChallenges.add(c.id);
-          await completePvP(c);
         }
       }
     } catch {}
@@ -206,7 +220,6 @@
       `<button onclick="respondChallenge('${challenge.id}',false,this.parentElement)" style="background:#3a1a1a;color:#ff6b6b;border:1px solid #5a2a2a;border-radius:3px;padding:2px 8px;margin-top:4px;cursor:pointer;font-family:inherit;font-size:0.7rem;">Decline</button>`;
     el.appendChild(div);
     el.scrollTop = el.scrollHeight;
-    // Store challenge for accept handler
     window._pendingChallenges = window._pendingChallenges || {};
     window._pendingChallenges[challenge.id] = challenge;
   }
@@ -215,10 +228,10 @@
     el.innerHTML = accept ? '<span style="color:#70c7ba;">Accepting...</span>' : '<span style="color:#888;">Declined.</span>';
     if (accept && window._pendingChallenges?.[id]) {
       await acceptChallenge(window._pendingChallenges[id]);
-      el.innerHTML = '<span style="color:#70c7ba;">Challenge accepted! Waiting for tx...</span>';
     }
   }
 
+  // Accept: just POST /accept — server creates combat session
   async function acceptChallenge(challenge) {
     const s = window._state;
     const kaspa = Wallet._kaspa;
@@ -231,157 +244,368 @@
         utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false } };
     }
     if (!myUtxo) { alert('Your covenant UTXO not found'); return; }
-
-    const fromScript = Covenant.buildPlayerScript(challenge.fromPubkey, challenge.fromHp, challenge.fromGold, challenge.fromLevel);
-    const fromSpk = kaspa.ScriptBuilder.fromScript(fromScript).createPayToScriptHashScript();
-    const myScript = Covenant.buildPlayerScript(pub, s._onChainHp, s._onChainGold, s._onChainLevel);
-    const mySpk = kaspa.ScriptBuilder.fromScript(myScript).createPayToScriptHashScript();
-
-    const rng = new SeededRng(challenge.id || 'pvp');
-    const myDmg = rng.next(s._onChainHp) + 1;
-    const theirDmg = rng.next(challenge.fromHp) + 1;
-    const newMyHp = Math.max(1, s._onChainHp - myDmg);
-    const newTheirHp = Math.max(1, challenge.fromHp - theirDmg);
-    const stake = challenge.stake || 10;
-    const iWin = theirDmg > myDmg;
-    const newMyGold = iWin ? s._onChainGold + stake : Math.max(0, s._onChainGold - stake);
-    const newTheirGold = iWin ? Math.max(0, challenge.fromGold - stake) : challenge.fromGold + stake;
-
-    const newFromScript = Covenant.buildPlayerScript(challenge.fromPubkey, newTheirHp, newTheirGold, challenge.fromLevel);
-    const newFromSpk = kaspa.ScriptBuilder.fromScript(newFromScript).createPayToScriptHashScript();
-    const newMyScript = Covenant.buildPlayerScript(pub, newMyHp, newMyGold, s._onChainLevel);
-    const newMySpk = kaspa.ScriptBuilder.fromScript(newMyScript).createPayToScriptHashScript();
-
-    const myAmt = BigInt(myUtxo.utxoEntry?.amount || myUtxo.entry?.amount || '20000000');
-    const theirAmt = BigInt(challenge.fromUtxo.amount);
-    const fee = 10000n;
-
-    const unsignedTx = new kaspa.Transaction({
-      version: 0,
-      inputs: [
-        { previousOutpoint: challenge.fromUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
-          utxo: { outpoint: challenge.fromUtxo.outpoint, amount: theirAmt, scriptPublicKey: fromSpk, blockDaaScore: 0n, isCoinbase: false } },
-        { previousOutpoint: myUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
-          utxo: { outpoint: myUtxo.outpoint, amount: myAmt, scriptPublicKey: mySpk, blockDaaScore: 0n, isCoinbase: false } },
-      ],
-      outputs: [
-        { value: theirAmt - fee, scriptPublicKey: newFromSpk },
-        { value: myAmt, scriptPublicKey: newMySpk },
-      ],
-      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
-    });
-
-    const sigHex = kaspa.createInputSignature(unsignedTx, 1, pk);
-    const pubBytes = new Uint8Array(pub.match(/.{2}/g).map(h => parseInt(h, 16)));
-    const argSb = new kaspa.ScriptBuilder();
-    argSb.addData(pubBytes);
-    argSb.addI64(BigInt(newMyHp)); argSb.addI64(BigInt(newMyGold)); argSb.addI64(BigInt(s._onChainLevel));
-    const redeemSb = new kaspa.ScriptBuilder();
-    redeemSb.addData(new Uint8Array(myScript.match(/.{2}/g).map(h => parseInt(h, 16))));
-    const mySigScript = sigHex + argSb.toString() + redeemSb.toString();
-
-    await fetch(PVP_API + '/accept', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        challengeId: challenge.id, toAddr: Wallet.address, toPubkey: pub,
-        toHp: s._onChainHp, toGold: s._onChainGold, toLevel: s._onChainLevel,
-        toUtxo: { outpoint: myUtxo.outpoint, amount: String(myAmt) },
-        toSigScript: mySigScript, newTheirHp, newTheirGold, newMyHp, newMyGold,
-      }),
-    });
-
-    s._onChainHp = newMyHp; s._onChainGold = newMyGold;
-    s.hp = newMyHp; s.gold = newMyGold;
-    GameState.save(s);
+    try {
+      const resp = await fetch(PVP_API + '/accept', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId: challenge.id, toAddr: Wallet.address, toPubkey: pub,
+          toHp: s._onChainHp, toGold: s._onChainGold, toLevel: s._onChainLevel,
+          toUtxo: { outpoint: myUtxo.outpoint, amount: String((myUtxo.utxoEntry || myUtxo.entry).amount) },
+          toName: s.name,
+        }),
+      });
+      const data = await resp.json();
+      if (data.ok) chatMsg('system', 'Challenge accepted! Combat starting...');
+      else chatMsg('error', data.error || 'Accept failed');
+    } catch (e) { chatMsg('error', 'Accept error: ' + e.message); }
   }
 
-  async function completePvP(challenge) {
-    const s = window._state;
+  // --- PvP Status Polling & Combat State Machine ---
+
+  async function pollPvpStatus() {
+    if (!Wallet.address || !window._state) return;
+    try {
+      const resp = await fetch(PVP_API + '/pvp/status?addr=' + Wallet.address);
+      const data = await resp.json();
+
+      if (!data || !data.id) {
+        if (_pvpSession) {
+          _pvpSession = null;
+          _pvpPhase = 'idle';
+          clearCombatUI();
+        }
+        return;
+      }
+
+      _pvpSession = data;
+      console.log('PvP poll:', data.status, 'phase:', _pvpPhase, 'round:', data.round, 'turn:', data.turn);
+
+      if (data.status === 'active') {
+        _pvpPhase = 'combat';
+        renderCombatUI(data);
+      }
+
+      if (data.status === 'finished') {
+        renderCombatUI(data);
+        if (_pvpPhase !== 'signing' && _pvpPhase !== 'waiting' && _pvpPhase !== 'submitting' && _pvpPhase !== 'done') {
+          _pvpPhase = 'signing';
+          pvpSign(data);
+        }
+        // If we already signed and are waiting, check if both sigs are now in
+        if (_pvpPhase === 'waiting' && data.a?.sigScript && data.b?.sigScript) {
+          _pvpPhase = 'submitting';
+          pvpAssembleAndSubmit(data);
+        }
+      }
+
+      if (data.status === 'completed') {
+        if (_pvpPhase !== 'done') {
+          // Update local state from final session data
+          const mySide = getMyPvpSide(data);
+          if (mySide) {
+            const me = data[mySide];
+            const s = window._state;
+            s._onChainHp = me.hp; s._onChainGold = me.gold;
+            s.hp = me.hp; s.gold = me.gold;
+            GameState.save(s);
+          }
+          chatMsg('system', 'PvP combat settled on-chain!');
+          _pvpPhase = 'done';
+          renderCombatUI(data);
+          setTimeout(() => { clearCombatUI(); _pvpSession = null; _pvpPhase = 'idle'; }, 10000);
+        }
+      }
+    } catch (e) { console.log('PvP status error:', e); }
+  }
+
+  function clearCombatUI() {
+    const el = document.getElementById('pvp-combat-ui');
+    if (el) el.remove();
+  }
+
+  // --- Combat UI Renderer ---
+
+  function renderCombatUI(session) {
+    const mySide = getMyPvpSide(session);
+    if (!mySide) return;
+    const me = session[mySide];
+    const them = session[mySide === 'a' ? 'b' : 'a'];
+    const isMyTurn = session.status === 'active' && session.turn === mySide;
+    const isFinished = session.status === 'finished' || session.status === 'completed';
+
+    let container = document.getElementById('pvp-combat-ui');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'pvp-combat-ui';
+      container.style.cssText = 'background:#0a0e14;border:2px solid #d4a847;border-radius:6px;padding:10px;margin:4px 0;font-family:"JetBrains Mono",monospace;font-size:0.75rem;';
+      const chatEl = document.getElementById('chat-messages');
+      if (chatEl) chatEl.prepend(container);
+    }
+
+    // Timeout countdown
+    const elapsed = Date.now() - (session.lastActionTs || Date.now());
+    const remaining = Math.max(0, 3600000 - elapsed);
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    const timeStr = `${mins}:${String(secs).padStart(2, '0')}`;
+
+    // HP bar helper
+    const hpBar = (hp, max) => {
+      const m = Math.max(1, max || hp);
+      const barW = 10;
+      const filled = Math.max(0, Math.round((hp / m) * barW));
+      return '\u2588'.repeat(filled) + '\u2591'.repeat(barW - filled) + ` ${hp}/${m}`;
+    };
+
+    let html = '';
+
+    // Header — victory/defeat or combat status
+    if (session.status === 'completed') {
+      const iWon = session.winner === mySide;
+      html += `<div style="color:${iWon ? '#70c7ba' : '#ff6b6b'};text-align:center;font-weight:bold;">`;
+      html += iWon ? '\u2550\u2550\u2550 VICTORY \u2550\u2550\u2550' : '\u2550\u2550\u2550 DEFEAT \u2550\u2550\u2550';
+      html += '</div><div style="color:#d4a847;text-align:center;margin-top:4px;">Settled on-chain \u2713</div>';
+    } else if (session.status === 'finished') {
+      const iWon = session.winner === mySide;
+      html += `<div style="color:${iWon ? '#70c7ba' : '#ff6b6b'};text-align:center;font-weight:bold;">`;
+      html += iWon ? '\u2550\u2550\u2550 VICTORY \u2550\u2550\u2550' : '\u2550\u2550\u2550 DEFEAT \u2550\u2550\u2550';
+      html += '</div>';
+      if (session.reason === 'forfeit') {
+        html += `<div style="color:#888;text-align:center;">${iWon ? them.name + ' forfeited!' : 'You forfeited.'}</div>`;
+      }
+      html += `<div style="color:#d4a847;text-align:center;margin-top:4px;">Signing covenant update...</div>`;
+    } else {
+      html += `<div style="color:#d4a847;text-align:center;font-weight:bold;">\u2550\u2550\u2550 PvP COMBAT \u2550\u2550\u2550</div>`;
+      html += `<div style="color:#888;text-align:center;margin-bottom:6px;">Round ${session.round} \u2014 ${isMyTurn ? 'YOUR TURN' : them.name + "'s turn"}</div>`;
+    }
+
+    // Player stats side by side
+    html += `<div style="display:flex;justify-content:space-between;margin:6px 0;">`;
+    html += `<div><span style="color:#70c7ba;">${me.name} (you)</span><br>`;
+    html += `<span style="color:${me.hp > (me.maxHp || 25) * 0.3 ? '#70c7ba' : '#ff6b6b'};">HP: ${hpBar(me.hp, me.maxHp)}</span><br>`;
+    html += `<span style="color:#888;">ATK:${me.attack} DEF:${me.defense}</span></div>`;
+    html += `<div style="text-align:right;"><span style="color:#ff6b6b;">${them.name}</span><br>`;
+    html += `<span style="color:${them.hp > (them.maxHp || 25) * 0.3 ? '#70c7ba' : '#ff6b6b'};">HP: ${hpBar(them.hp, them.maxHp)}</span><br>`;
+    html += `<span style="color:#888;">ATK:${them.attack} DEF:${them.defense}</span></div>`;
+    html += `</div>`;
+
+    // Combat log (last 3 entries)
+    if (session.log?.length > 0) {
+      const recent = session.log.slice(-3);
+      html += `<div style="border-top:1px solid #2a2e38;padding-top:4px;margin-top:4px;">`;
+      for (const entry of recent) {
+        if (entry.action === 'attack') {
+          html += `<div style="color:#c0c0c0;">R${entry.round}: ${entry.who} \u2192 ${entry.target} for ${entry.dmg} dmg</div>`;
+        } else if (entry.action === 'defend') {
+          html += `<div style="color:#6bb8ff;">R${entry.round}: ${entry.who} defends (counter ${entry.dmg}, +2 DEF)</div>`;
+        } else if (entry.action === 'heal') {
+          html += `<div style="color:#4ecdc4;">R${entry.round}: ${entry.who} heals +${entry.heal} HP</div>`;
+        } else if (entry.action === 'forfeit') {
+          html += `<div style="color:#ff6b6b;">R${entry.round}: ${entry.who} forfeits!</div>`;
+        }
+      }
+      html += `</div>`;
+    }
+
+    // Action buttons (only during active combat on our turn)
+    if (isMyTurn && session.status === 'active') {
+      const bs = 'flex:1;border-radius:3px;padding:4px 8px;cursor:pointer;font-family:inherit;font-size:0.7rem;';
+      html += `<div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">`;
+      html += `<button onclick="pvpAction('attack')" style="${bs}background:#3a1a1a;color:#ff6b6b;border:1px solid #5a2a2a;">\u2694 Attack</button>`;
+      html += `<button onclick="pvpAction('defend')" style="${bs}background:#1a2a3a;color:#6bb8ff;border:1px solid #2a4a6a;">\ud83d\udee1 Defend</button>`;
+      html += `<button onclick="pvpAction('heal')" style="${bs}background:#1a3a2a;color:#70c7ba;border:1px solid #2a5a3a;">\u271a Heal</button>`;
+      html += `<button onclick="pvpAction('forfeit')" style="${bs}background:#2a2a2a;color:#888;border:1px solid #3a3a3a;">\ud83c\udff3 Forfeit</button>`;
+      html += `</div>`;
+    } else if (session.status === 'active') {
+      html += `<div style="color:#888;text-align:center;margin-top:8px;">Waiting for ${them.name}... (${timeStr})</div>`;
+    }
+
+    container.innerHTML = html;
+  }
+
+  // --- Combat Actions ---
+
+  async function pvpAction(action) {
+    if (!_pvpSession) return;
+    // Disable buttons immediately to prevent double-submit
+    document.querySelectorAll('#pvp-combat-ui button').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+    try {
+      const resp = await fetch(PVP_API + '/pvp/action', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: _pvpSession.id, addr: Wallet.address, action }),
+      });
+      const data = await resp.json();
+      if (!data.ok) chatMsg('error', data.error || 'Action failed');
+      // Immediately poll for updated state
+      await pollPvpStatus();
+    } catch (e) { chatMsg('error', 'Action error: ' + e.message); }
+  }
+
+  // --- Settlement: Dual-Signature ICC Transaction ---
+
+  async function pvpSign(session) {
     const kaspa = Wallet._kaspa;
+    if (!kaspa) return;
     const pk = new kaspa.PrivateKey(Wallet._privateKeyHex);
     const pub = pk.toPublicKey().toXOnlyPublicKey().toString();
+    const mySide = getMyPvpSide(session);
+    if (!mySide) return;
+    const myInputIdx = mySide === 'a' ? 0 : 1;
 
-    const fromScript = Covenant.buildPlayerScript(pub, s._onChainHp, s._onChainGold, s._onChainLevel);
-    const fromSpk = kaspa.ScriptBuilder.fromScript(fromScript).createPayToScriptHashScript();
-    const toScript = Covenant.buildPlayerScript(challenge.toPubkey, challenge.toHp, challenge.toGold, challenge.toLevel);
-    const toSpk = kaspa.ScriptBuilder.fromScript(toScript).createPayToScriptHashScript();
-
-    const newMyHp = challenge.newTheirHp;
-    const newMyGold = challenge.newTheirGold;
-    const newTheirHp = challenge.newMyHp;
-    const newTheirGold = challenge.newMyGold;
-
-    const newFromScript = Covenant.buildPlayerScript(pub, newMyHp, newMyGold, s._onChainLevel);
-    const newFromSpk = kaspa.ScriptBuilder.fromScript(newFromScript).createPayToScriptHashScript();
-    const newToScript = Covenant.buildPlayerScript(challenge.toPubkey, newTheirHp, newTheirGold, challenge.toLevel);
-    const newToSpk = kaspa.ScriptBuilder.fromScript(newToScript).createPayToScriptHashScript();
-
-    const myAddr = Covenant.getCovenantAddress(kaspa, pub, s._onChainHp, s._onChainGold, s._onChainLevel);
-    let myUtxo = myAddr ? await Covenant.findCovenantUtxo(myAddr) : null;
-    if (!myUtxo && s._lastPlayerTxId) {
-      myUtxo = { outpoint: { transactionId: s._lastPlayerTxId, index: 0 },
-        utxoEntry: { amount: s._lastPlayerAmount || '20000000', blockDaaScore: '0', isCoinbase: false } };
-    }
-    if (!myUtxo) return;
-
-    const myAmt = BigInt(myUtxo.utxoEntry?.amount || myUtxo.entry?.amount || '20000000');
-    const theirAmt = BigInt(challenge.toUtxo.amount);
-    const fee = 10000n;
-
-    const unsignedTx = new kaspa.Transaction({
-      version: 0,
-      inputs: [
-        { previousOutpoint: myUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
-          utxo: { outpoint: myUtxo.outpoint, amount: myAmt, scriptPublicKey: fromSpk, blockDaaScore: 0n, isCoinbase: false } },
-        { previousOutpoint: challenge.toUtxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
-          utxo: { outpoint: challenge.toUtxo.outpoint, amount: theirAmt, scriptPublicKey: toSpk, blockDaaScore: 0n, isCoinbase: false } },
-      ],
-      outputs: [
-        { value: myAmt - fee, scriptPublicKey: newFromSpk },
-        { value: theirAmt, scriptPublicKey: newToSpk },
-      ],
-      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
-    });
-
-    const sigHex = kaspa.createInputSignature(unsignedTx, 0, pk);
-    const pubBytes = new Uint8Array(pub.match(/.{2}/g).map(h => parseInt(h, 16)));
-    const argSb = new kaspa.ScriptBuilder();
-    argSb.addData(pubBytes);
-    argSb.addI64(BigInt(newMyHp)); argSb.addI64(BigInt(newMyGold)); argSb.addI64(BigInt(s._onChainLevel));
-    const redeemSb = new kaspa.ScriptBuilder();
-    redeemSb.addData(new Uint8Array(fromScript.match(/.{2}/g).map(h => parseInt(h, 16))));
-    const mySigScript = sigHex + argSb.toString() + redeemSb.toString();
-
-    const signedTx = new kaspa.Transaction({
-      version: 0,
-      inputs: [
-        { previousOutpoint: myUtxo.outpoint, signatureScript: mySigScript, sequence: 0n, sigOpCount: 1 },
-        { previousOutpoint: challenge.toUtxo.outpoint, signatureScript: challenge.toSigScript, sequence: 0n, sigOpCount: 1 },
-      ],
-      outputs: [
-        { value: myAmt - fee, scriptPublicKey: newFromSpk },
-        { value: theirAmt, scriptPublicKey: newToSpk },
-      ],
-      lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
-    });
+    console.log('PvP signing — side:', mySide, 'winner:', session.winner);
 
     try {
+      // Starting state for redeem scripts (state the UTXO was locked with)
+      // Server should provide startHp/startGold; fall back to maxHp/gold
+      const aStartHp = session.a.startHp ?? session.a.maxHp ?? session.a.hp;
+      const aStartGold = session.a.startGold ?? session.a.gold;
+      const bStartHp = session.b.startHp ?? session.b.maxHp ?? session.b.hp;
+      const bStartGold = session.b.startGold ?? session.b.gold;
+
+      // Redeem scripts (current UTXO covenant scripts — pre-combat state)
+      const aScript = Covenant.buildPlayerScript(session.a.pubkey, aStartHp, aStartGold, session.a.level);
+      const bScript = Covenant.buildPlayerScript(session.b.pubkey, bStartHp, bStartGold, session.b.level);
+      const aSpk = kaspa.ScriptBuilder.fromScript(aScript).createPayToScriptHashScript();
+      const bSpk = kaspa.ScriptBuilder.fromScript(bScript).createPayToScriptHashScript();
+
+      // New output scripts (final state after combat)
+      const aNewScript = Covenant.buildPlayerScript(session.a.pubkey, session.a.hp, session.a.gold, session.a.level);
+      const bNewScript = Covenant.buildPlayerScript(session.b.pubkey, session.b.hp, session.b.gold, session.b.level);
+      const aNewSpk = kaspa.ScriptBuilder.fromScript(aNewScript).createPayToScriptHashScript();
+      const bNewSpk = kaspa.ScriptBuilder.fromScript(bNewScript).createPayToScriptHashScript();
+
+      const aAmt = BigInt(session.a.utxo.amount);
+      const bAmt = BigInt(session.b.utxo.amount);
+      const fee = 10000n;
+
+      // Canonical unsigned tx — A=input0, B=input1, fee from A
+      const unsignedTx = new kaspa.Transaction({
+        version: 0,
+        inputs: [
+          { previousOutpoint: session.a.utxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+            utxo: { outpoint: session.a.utxo.outpoint, amount: aAmt, scriptPublicKey: aSpk, blockDaaScore: 0n, isCoinbase: false } },
+          { previousOutpoint: session.b.utxo.outpoint, signatureScript: '', sequence: 0n, sigOpCount: 1,
+            utxo: { outpoint: session.b.utxo.outpoint, amount: bAmt, scriptPublicKey: bSpk, blockDaaScore: 0n, isCoinbase: false } },
+        ],
+        outputs: [
+          { value: aAmt - fee, scriptPublicKey: aNewSpk },
+          { value: bAmt, scriptPublicKey: bNewSpk },
+        ],
+        lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+      });
+
+      // Sign our input: <sig> <pubkey> <newHp> <newGold> <newLevel> <redeemScript>
+      const sigHex = kaspa.createInputSignature(unsignedTx, myInputIdx, pk);
+      const pubBytes = new Uint8Array(pub.match(/.{2}/g).map(h => parseInt(h, 16)));
+      const me = session[mySide];
+      const argSb = new kaspa.ScriptBuilder();
+      argSb.addData(pubBytes);
+      argSb.addI64(BigInt(me.hp));
+      argSb.addI64(BigInt(me.gold));
+      argSb.addI64(BigInt(me.level));
+      const redeemSb = new kaspa.ScriptBuilder();
+      const myRedeemScript = mySide === 'a' ? aScript : bScript;
+      redeemSb.addData(new Uint8Array(myRedeemScript.match(/.{2}/g).map(h => parseInt(h, 16))));
+      const mySigScript = sigHex + argSb.toString() + redeemSb.toString();
+
+      console.log('PvP sig_script built, posting to server...');
+
+      // POST our sig to the server
+      const resp = await fetch(PVP_API + '/pvp/sign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id, addr: Wallet.address, sigScript: mySigScript }),
+      });
+      const data = await resp.json();
+
+      if (data.ok && data.ready) {
+        // Both sigs are in — assemble and submit immediately
+        console.log('Both sigs ready, assembling ICC tx...');
+        session.a.sigScript = data.a || session.a.sigScript;
+        session.b.sigScript = data.b || session.b.sigScript;
+        _pvpPhase = 'submitting';
+        await pvpAssembleAndSubmit(session);
+      } else {
+        chatMsg('system', 'Signed! Waiting for opponent to sign...');
+        _pvpPhase = 'waiting';
+      }
+    } catch (e) {
+      console.log('PvP sign error:', e);
+      chatMsg('error', 'Sign error: ' + e.message);
+      _pvpPhase = 'idle'; // Allow retry on next poll
+    }
+  }
+
+  async function pvpAssembleAndSubmit(session) {
+    const kaspa = Wallet._kaspa;
+    if (!kaspa) return;
+    const mySide = getMyPvpSide(session);
+
+    try {
+      // Rebuild output scripts (must match what was signed)
+      const aNewScript = Covenant.buildPlayerScript(session.a.pubkey, session.a.hp, session.a.gold, session.a.level);
+      const bNewScript = Covenant.buildPlayerScript(session.b.pubkey, session.b.hp, session.b.gold, session.b.level);
+      const aNewSpk = kaspa.ScriptBuilder.fromScript(aNewScript).createPayToScriptHashScript();
+      const bNewSpk = kaspa.ScriptBuilder.fromScript(bNewScript).createPayToScriptHashScript();
+
+      const aAmt = BigInt(session.a.utxo.amount);
+      const bAmt = BigInt(session.b.utxo.amount);
+      const fee = 10000n;
+
+      // Assemble signed tx with both sig_scripts
+      const signedTx = new kaspa.Transaction({
+        version: 0,
+        inputs: [
+          { previousOutpoint: session.a.utxo.outpoint, signatureScript: session.a.sigScript, sequence: 0n, sigOpCount: 1 },
+          { previousOutpoint: session.b.utxo.outpoint, signatureScript: session.b.sigScript, sequence: 0n, sigOpCount: 1 },
+        ],
+        outputs: [
+          { value: aAmt - fee, scriptPublicKey: aNewSpk },
+          { value: bAmt, scriptPublicKey: bNewSpk },
+        ],
+        lockTime: 0n, subnetworkId: '0000000000000000000000000000000000000000', gas: 0n, payload: '',
+      });
+
       const rpc = await Covenant.ensureRpc(kaspa);
       const result = await rpc.submitTransaction({ transaction: signedTx, allowOrphan: false });
       const txId = result.transactionId;
-      s._onChainHp = newMyHp; s._onChainGold = newMyGold;
-      s._lastPlayerTxId = txId; s._lastPlayerAmount = String(myAmt - fee);
-      s.hp = newMyHp; s.gold = newMyGold;
+
+      console.log('PvP ICC tx submitted:', txId);
+
+      // Update local state
+      const me = session[mySide];
+      const s = window._state;
+      s._onChainHp = me.hp; s._onChainGold = me.gold;
+      s.hp = me.hp; s.gold = me.gold;
+      s._lastPlayerTxId = txId;
+      s._lastPlayerAmount = String(mySide === 'a' ? aAmt - fee : bAmt);
       GameState.save(s);
-      Chain.emitCovenantTx('ICC: Real PvP', 'Two players, one atomic tx!', txId);
-      await fetch(PVP_API + '/submit-pvp', {
+
+      Chain.emitCovenantTx('ICC: Real PvP', 'Two-player atomic covenant update!', txId);
+      chatMsg('system', `Settled on-chain! TX: ${txId.substring(0, 16)}...`);
+
+      await fetch(PVP_API + '/pvp/complete', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challengeId: challenge.id, txId }),
+        body: JSON.stringify({ sessionId: session.id, txId }),
       });
-    } catch (e) { console.log('PvP submit error:', e.message); }
+
+      _pvpPhase = 'done';
+      setTimeout(() => { clearCombatUI(); _pvpSession = null; _pvpPhase = 'idle'; }, 10000);
+    } catch (e) {
+      console.log('PvP submit error:', e);
+      if (e.message?.includes('already') || e.message?.includes('missing')) {
+        chatMsg('system', 'Settlement tx already submitted.');
+        _pvpPhase = 'done';
+        setTimeout(() => { clearCombatUI(); _pvpSession = null; _pvpPhase = 'idle'; }, 10000);
+      } else {
+        chatMsg('error', 'Submit error: ' + e.message);
+        _pvpPhase = 'waiting'; // Allow retry on next poll
+      }
+    }
   }
 
+  // --- Polling Intervals ---
   setInterval(pollChallenges, 10000);
+  setInterval(pollPvpStatus, 5000);
   </script>
 </body>
 </html>

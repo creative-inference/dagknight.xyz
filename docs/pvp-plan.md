@@ -227,8 +227,33 @@ To ensure identical txs:
 
 1. **Server** ✅ — combat session CRUD, actions, timeout, forfeit, signing
 2. **Client: accept flow** ✅ — challenge, in-chat accept/decline buttons
-3. **Client: combat UI** — poll pvp/status, show combat display, action buttons
-4. **Client: settlement** — sign, relay, submit ICC tx
+3. **Client: combat UI** ✅ — poll pvp/status every 5s, renderCombatUI with HP bars, action buttons
+4. **Client: settlement** ✅ — pvpSign + pvpAssembleAndSubmit, dual-sig ICC tx
 5. **Testing** — two-browser test on test.html
 6. **Polish** — turn countdown timer, combat animations, sound
 7. **Merge to live** — add to index.html after testing
+
+## Next Session: Testing Checklist
+
+Test at https://dagknight.xyz/game/test.html with two browser windows.
+
+### Verify server field names
+- [ ] Check `/pvp/status` response shape — confirm `startHp`/`startGold` vs `maxHp`/`gold` for redeem scripts
+- [ ] If server doesn't provide starting state separately, add `startHp`/`startGold` fields to session creation in beacon-indexer.js
+
+### Two-browser flow
+- [ ] Player A challenges Player B via PvP button in player list
+- [ ] Player B sees challenge prompt in chat, clicks Accept
+- [ ] Both players see combat UI appear (HP bars, round info)
+- [ ] Turns alternate correctly — action buttons only show on your turn
+- [ ] Attack/Defend/Heal/Forfeit all work, combat log updates
+- [ ] Combat ends when HP reaches 0 — victory/defeat shown correctly
+- [ ] Both clients auto-sign after combat ends
+- [ ] ICC tx submits successfully with dual Schnorr sigs
+- [ ] Local state (hp, gold) updates for both players
+- [ ] Combat UI clears after ~10 seconds
+
+### Edge cases
+- [ ] Forfeit mid-combat — half-gold penalty applied correctly
+- [ ] Refresh during combat — pollPvpStatus picks up existing session
+- [ ] Challenge someone already in combat — server rejects
